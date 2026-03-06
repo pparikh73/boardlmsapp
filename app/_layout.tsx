@@ -49,6 +49,7 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="login" />
         <Stack.Screen name="guest-login" />
+        <Stack.Screen name="sso-webview" />
         <Stack.Screen name="(tabs)" />
       </Stack>
     </>

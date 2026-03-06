@@ -96,4 +96,8 @@ async function saveSession(session: Session): Promise<void> {
   await SecureStore.setItemAsync(SESSION_STORE_KEY, JSON.stringify(session));
 }
 
+export async function saveSessionByMethod(method: 'customerPartner' | 'employee'): Promise<void> {
+  await saveSession({ method, loggedInAt: new Date().toISOString() });
+}
+
 export const LOGOUT_URL = `${SKILLJAR_BASE_URL}/auth/logout`;
