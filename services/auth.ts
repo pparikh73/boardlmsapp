@@ -1,5 +1,6 @@
 import * as WebBrowser from 'expo-web-browser';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 import { AUTH_URLS, SKILLJAR_BASE_URL, SESSION_STORE_KEY } from '../constants/skilljar';
 
 export type AuthMethod = 'customerPartner' | 'employee' | 'guest';
@@ -18,12 +19,31 @@ export interface Session {
  * Skilljar redirects back to the app scheme (boardacademy://).
  */
 export async function loginWithSSO(method: 'customerPartner' | 'employee'): Promise<boolean> {
-  const url = AUTH_URLS[method];
-  const redirectUrl = 'boardacademy://auth/callback';
+  const skilljarUrl = AUTH_URLS[method];
 
-  const result = await WebBrowser.openAuthSessionAsync(url, redirectUrl, {
+  if (Platform.OS === 'web') {
+    // On web: fetch the Azure B2C URL server-side (with fresh state from Skilljar)
+    // then do a full-page redirect. This bypasses Skilljar's IdP selection page.
+    // After B2C auth, Azure redirects to Skilljar's callback → academy.board.com.
+    try {
+      if (method === 'customerPartner') {
+        const resp = await fetch('/api/auth-start');
+        const { url } = await resp.json();
+        window.location.href = url;
+      } else {
+        window.location.href = skilljarUrl;
+      }
+    } catch {
+      window.location.href = skilljarUrl;
+    }
+    return false; // page navigates away; return value unused
+  }
+
+  // Native path
+  const redirectUrl = 'boardacademy://auth/callback';
+  const result = await WebBrowser.openAuthSessionAsync(skilljarUrl, redirectUrl, {
     showInRecents: false,
-    preferEphemeralSession: false, // keep cookies so Skilljar WebView works after
+    preferEphemeralSession: false,
   });
 
   if (result.type === 'success') {
