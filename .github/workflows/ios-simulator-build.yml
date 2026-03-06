@@ -29,8 +29,10 @@ jobs:
       - name: Build iOS Simulator
         run: |
           WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | head -1)
-          SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
-          echo "Using workspace: $WORKSPACE"
+          echo "Workspace: $WORKSPACE"
+          echo "Available schemes:"
+          xcodebuild -workspace "$WORKSPACE" -list 2>&1
+          SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list 2>/dev/null | awk '/Schemes:/,/^$/' | grep -v "Schemes:" | grep -v "^$" | head -1 | xargs)
           echo "Using scheme: $SCHEME"
           xcodebuild \
             -workspace "$WORKSPACE" \
