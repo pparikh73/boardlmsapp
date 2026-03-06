@@ -34,15 +34,23 @@ jobs:
           xcodebuild -workspace "$WORKSPACE" -list 2>&1
           SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list 2>/dev/null | awk '/Schemes:/,/^$/' | grep -v "Schemes:" | grep -v "^$" | head -1 | xargs)
           echo "Using scheme: $SCHEME"
+          set -o pipefail
           xcodebuild \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
             -configuration Release \
             -sdk iphonesimulator \
             -derivedDataPath ios/build \
+            ONLY_ACTIVE_ARCH=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            EXCLUDED_ARCHS=arm64 \
+          2>&1 | tee /tmp/xcodebuild.log | grep -E "error:|warning:|Build (succeeded|FAILED)" || true
+          if grep -q "BUILD FAILED" /tmp/xcodebuild.log; then
+            echo "=== ERRORS ===" && grep "error:" /tmp/xcodebuild.log | head -50
+            exit 1
+          fi
 
       - name: Package .app as .tar.gz
         run: |
