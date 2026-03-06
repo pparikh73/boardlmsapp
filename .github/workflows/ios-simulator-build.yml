@@ -28,9 +28,13 @@ jobs:
 
       - name: Build iOS Simulator
         run: |
+          WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | head -1)
+          SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
+          echo "Using workspace: $WORKSPACE"
+          echo "Using scheme: $SCHEME"
           xcodebuild \
-            -workspace ios/boardacademy.xcworkspace \
-            -scheme boardacademy \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
             -configuration Release \
             -sdk iphonesimulator \
             -derivedDataPath ios/build \
@@ -40,8 +44,9 @@ jobs:
 
       - name: Package .app as .tar.gz
         run: |
-          cd ios/build/Build/Products/Release-iphonesimulator
-          tar -czf ~/boardacademy-simulator.tar.gz boardacademy.app
+          APP=$(find ios/build/Build/Products/Release-iphonesimulator -name "*.app" -maxdepth 1 | head -1)
+          echo "Packaging: $APP"
+          tar -czf ~/boardacademy-simulator.tar.gz -C "$(dirname "$APP")" "$(basename "$APP")"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
