@@ -31,6 +31,11 @@
       "output": "static"
     },
     "scheme": "boardacademy",
+    "extra": {
+      "eas": {
+        "projectId": "aa2b69a6-b53c-4d1d-9cd3-eb8272d468a0"
+      }
+    },
     "plugins": [
       "expo-router",
       "expo-web-browser",

@@ -54,11 +54,16 @@ export async function loginWithGuest(email: string, password: string): Promise<{
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params.toString(),
-      redirect: 'manual', // Skilljar redirects on success
+      // Web browsers honour redirect:'manual' and expose the 3xx status directly.
+      // React Native's fetch always follows redirects, so we fall back to checking
+      // whether the final URL is still a login/auth page (failure) or not (success).
+      redirect: Platform.OS === 'web' ? 'manual' : 'follow',
     });
 
-    // A redirect (3xx) means successful auth
-    const success = response.status >= 300 && response.status < 400;
+    const isLoginPage = response.url.includes('/auth/login') || response.url.includes('/auth/domain');
+    const success = Platform.OS === 'web'
+      ? (response.status >= 300 && response.status < 400)
+      : !isLoginPage;
 
     if (success) {
       await saveSession({
