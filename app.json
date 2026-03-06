@@ -40,8 +40,7 @@
       }
     },
     "plugins": [
-      "expo-router",
-      "expo-web-browser",
+      ["expo-router", { "origin": "https://academy.board.com" }],
       "expo-secure-store"
     ]
   }
