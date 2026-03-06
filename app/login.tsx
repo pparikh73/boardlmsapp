@@ -52,7 +52,6 @@ export default function LoginScreen() {
           <LoginButton
             label="Customer / Partner Login"
             onPress={() => handleSSO('customerPartner')}
-            loading={loadingMethod === 'customerPartner'}
             variant="primary"
           />
 
@@ -71,7 +70,6 @@ export default function LoginScreen() {
           <LoginButton
             label="Employee Login"
             onPress={() => handleSSO('employee')}
-            loading={loadingMethod === 'employee'}
             variant="ghost"
             style={styles.employeeButton}
           />
