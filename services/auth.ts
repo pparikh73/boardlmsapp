@@ -22,20 +22,7 @@ export async function loginWithSSO(method: 'customerPartner' | 'employee'): Prom
   const skilljarUrl = AUTH_URLS[method];
 
   if (Platform.OS === 'web') {
-    // On web: fetch the Azure B2C URL server-side (with fresh state from Skilljar)
-    // then do a full-page redirect. This bypasses Skilljar's IdP selection page.
-    // After B2C auth, Azure redirects to Skilljar's callback → academy.board.com.
-    try {
-      if (method === 'customerPartner') {
-        const resp = await fetch('/api/auth-start');
-        const { url } = await resp.json();
-        window.location.href = url;
-      } else {
-        window.location.href = skilljarUrl;
-      }
-    } catch {
-      window.location.href = skilljarUrl;
-    }
+    window.location.href = skilljarUrl;
     return false; // page navigates away; return value unused
   }
 
