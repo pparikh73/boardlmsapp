@@ -8,9 +8,9 @@ export const AUTH_URLS = {
   // OAuth SSO — Customer / Partner login (direct to academy.board.com to avoid AVEYA IdP selection)
   customerPartner: `${SKILLJAR_CONTENT_URL}/auth/login/3u81yknqkpzep?next=%2Fauth%2Fendpoint%2Flogin%2Fresult%3Fnext%3D%252F%26d%3D${SKILLJAR_DOMAIN}`,
   // SAML SSO — Employee login
-  employee: `${SKILLJAR_BASE_URL}/auth/login/3lxgvwj219h3a`,
+  employee: `${SKILLJAR_CONTENT_URL}/auth/login/3lxgvwj219h3a?next=%2Fauth%2Fendpoint%2Flogin%2Fresult%3Fnext%3D%252F%26d%3D${SKILLJAR_DOMAIN}`,
   // Native — Guest email/password login
-  guest: `${SKILLJAR_BASE_URL}/auth/login/ddawo1d1yhfb`,
+  guest: `${SKILLJAR_CONTENT_URL}/auth/login/ddawo1d1yhfb?next=%2Fauth%2Fendpoint%2Flogin%2Fresult%3Fnext%3D%252F%26d%3D${SKILLJAR_DOMAIN}`,
   // Guest sign-up
   signUp: `${SKILLJAR_BASE_URL}/auth/domain/${SKILLJAR_DOMAIN}/register`,
   // Logout
