@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   View,
   Text,
@@ -11,22 +10,14 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import LoginButton from '../components/LoginButton';
-import { loginWithSSO } from '../services/auth';
-import { BRAND, SUPPORT_EMAIL } from '../constants/skilljar';
+import { BRAND, SUPPORT_EMAIL, AUTH_URLS } from '../constants/skilljar';
 
 export default function LoginScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
-  const [loadingMethod, setLoadingMethod] = useState<'customerPartner' | 'employee' | null>(null);
-
-  async function handleSSO(method: 'customerPartner' | 'employee') {
-    setLoadingMethod(method);
-    const success = await loginWithSSO(method);
-    setLoadingMethod(null);
-    if (success) {
-      router.replace('/(tabs)');
-    }
+  function handleSSO(method: 'customerPartner' | 'employee') {
+    router.push({ pathname: '/sso-webview', params: { url: AUTH_URLS[method], method } });
   }
 
   function handleGuestLogin() {
