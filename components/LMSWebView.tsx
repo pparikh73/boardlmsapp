@@ -39,16 +39,20 @@ export default function LMSWebView({ url, onLogout }: LMSWebViewProps) {
         onNavigationStateChange={handleNavigationChange}
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
-        // Hide the browser scrollbar on Android for a cleaner look
         overScrollMode="never"
+        // Prevent the WebView itself from being panned horizontally
+        directionalLockEnabled
         // Allow inline video playback (for course videos)
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
-        // Inject CSS to hide Skilljar's "Powered by Skilljar" footer
+        // Prevent horizontal scroll; hide Skilljar "Powered by" footer
         injectedJavaScript={`
           (function() {
             var style = document.createElement('style');
-            style.innerHTML = '.sj-powered-by { display: none !important; }';
+            style.innerHTML = [
+              '.sj-powered-by { display: none !important; }',
+              'html, body { max-width: 100% !important; overflow-x: hidden !important; }'
+            ].join('');
             document.head.appendChild(style);
           })();
           true;
