@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, RefreshControl, ScrollView } from 'react-native';
-import { WebView, WebViewNavigation } from 'react-native-webview';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
+import * as WebBrowser from 'expo-web-browser';
 import { BRAND, AUTH_URLS } from '../constants/skilljar';
 
 interface LMSWebViewProps {
@@ -13,11 +14,36 @@ export default function LMSWebView({ url, onLogout }: LMSWebViewProps) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Allow-list of URL prefixes that should stay inside the WebView.
+  // Anything outside this list opens in SFSafariViewController (in-app browser).
+  const IN_APP_PREFIXES = [
+    'https://academy.board.com',
+    'https://accounts.skilljar.com',
+    'https://community.board.com',
+    'https://www.board.com',
+    'https://board.com',
+  ];
+
+  function isInAppUrl(url: string): boolean {
+    return IN_APP_PREFIXES.some((prefix) => url.startsWith(prefix));
+  }
+
   function handleNavigationChange(nav: WebViewNavigation) {
     // Detect if Skilljar redirected to the logout endpoint
-    if (nav.url.includes('/auth/logout') || nav.url.includes('/auth/domain') && nav.url.includes('/login')) {
+    if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
       onLogout?.();
     }
+  }
+
+  function handleShouldStartLoadWithRequest(request: WebViewRequest): boolean {
+    const { url } = request;
+    // Let normal in-app URLs through
+    if (isInAppUrl(url)) return true;
+    // Non-http(s) links (tel:, mailto:, etc.) — let the OS handle them
+    if (!url.startsWith('http')) return false;
+    // Truly external URL → open in SFSafariViewController, stay in app
+    WebBrowser.openBrowserAsync(url, { dismissButtonStyle: 'close' });
+    return false;
   }
 
   function handleRefresh() {
@@ -37,15 +63,18 @@ export default function LMSWebView({ url, onLogout }: LMSWebViewProps) {
           setRefreshing(false);
         }}
         onNavigationStateChange={handleNavigationChange}
+        onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
         overScrollMode="never"
-        // Prevent the WebView itself from being panned horizontally
         directionalLockEnabled
-        // Allow inline video playback (for course videos)
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
-        // Prevent horizontal scroll; hide Skilljar "Powered by" footer
+        // KEY FIX: prevents window.open() / target="_blank" from launching Safari.
+        // WKWebView will navigate the current view instead of opening a new window.
+        setSupportMultipleWindows={false}
+        // Prevent horizontal scroll; hide Skilljar "Powered by" footer;
+        // override window.open to stay in-app as a belt-and-suspenders measure.
         injectedJavaScript={`
           (function() {
             var style = document.createElement('style');
@@ -54,6 +83,14 @@ export default function LMSWebView({ url, onLogout }: LMSWebViewProps) {
               'html, body { max-width: 100% !important; overflow-x: hidden !important; }'
             ].join('');
             document.head.appendChild(style);
+
+            // Redirect window.open() calls to same-window navigation so they
+            // stay inside the WebView rather than launching Mobile Safari.
+            var _originalOpen = window.open;
+            window.open = function(url, target, features) {
+              if (url) { window.location.href = url; }
+              return null;
+            };
           })();
           true;
         `}

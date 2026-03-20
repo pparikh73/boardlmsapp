@@ -41,6 +41,17 @@ export default function SSOWebViewScreen() {
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
         allowsInlineMediaPlayback
+        setSupportMultipleWindows={false}
+        injectedJavaScript={`
+          (function() {
+            var _orig = window.open;
+            window.open = function(url, target, features) {
+              if (url) { window.location.href = url; }
+              return null;
+            };
+          })();
+          true;
+        `}
       />
       {loading && (
         <View style={styles.loadingOverlay}>
