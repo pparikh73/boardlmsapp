@@ -41,5 +41,15 @@
         "credentialsSource": "remote"
       }
     }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6760801943",
+        "ascApiKeyIssuerId": "c99fec98-68c8-4de7-9e0e-84e4002be8fc",
+        "ascApiKeyId": "QATS7T5237",
+        "ascApiKeyPath": "/home/user/AuthKey_QATS7T5237.p8"
+      }
+    }
   }
 }
