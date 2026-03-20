@@ -7,6 +7,7 @@ import {
   Pressable,
   useColorScheme,
   Platform,
+  Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import LoginButton from '../components/LoginButton';
@@ -37,10 +38,11 @@ export default function LoginScreen() {
       <View style={styles.container}>
         {/* Header / Branding */}
         <View style={styles.header}>
-          {/* Board logo placeholder — replace with <Image> once logo assets are provided */}
-          <View style={styles.logoPlaceholder}>
-            <Text style={styles.logoText}>BOARD</Text>
-          </View>
+          <Image
+            source={require('../assets/icon.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
           <Text style={[styles.title, isDark && styles.titleDark]}>Board Academy</Text>
           <Text style={[styles.subtitle, isDark && styles.subtitleDark]}>
             Your learning journey starts here
@@ -114,21 +116,11 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 16,
   },
-  logoPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 16,
-    backgroundColor: BRAND.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    // Replace this View+Text with an <Image> component when logo files are available
-  },
-  logoText: {
-    color: '#ffffff',
-    fontWeight: '900',
-    fontSize: 18,
-    letterSpacing: 2,
+  logoImage: {
+    width: 120,
+    height: 120,
+    marginBottom: 16,
+    borderRadius: 24,
   },
   title: {
     fontSize: 28,

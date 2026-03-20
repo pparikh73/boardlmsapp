@@ -69,7 +69,7 @@ export default function LMSWebView({ url, onLogout }: LMSWebViewProps) {
         overScrollMode="never"
         directionalLockEnabled
         allowsInlineMediaPlayback
-        mediaPlaybackRequiresUserAction={false}
+        mediaPlaybackRequiresUserAction={true}
         // KEY FIX: prevents window.open() / target="_blank" from launching Safari.
         // WKWebView will navigate the current view instead of opening a new window.
         setSupportMultipleWindows={false}

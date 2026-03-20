@@ -129,7 +129,7 @@ export default function ProfileScreen() {
           />
         </View>
 
-        <Text style={[styles.version, { color: subtext }]}>Board Academy v1.0.0</Text>
+        <Text style={[styles.version, { color: subtext }]}>Board Academy v2.116621.3</Text>
       </ScrollView>
     </SafeAreaView>
   );

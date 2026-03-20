@@ -54,14 +54,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="my-learning"
-        options={{
-          title: 'My Learning',
-          tabBarLabel: 'My Learning',
-          tabBarIcon: ({ color, size }) => <BookIcon color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
