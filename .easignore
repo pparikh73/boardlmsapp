@@ -1,0 +1,19 @@
+# Same as .gitignore but allowing credential files needed for local builds
+node_modules/
+.expo/
+dist/
+web-build/
+*.orig.*
+*.jks
+*.key
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+*.pem
+.env
+.env.local
+.env.*.local
+*.tsbuildinfo
+# Allow dist_cert.p12 and profile.mobileprovision for EAS local credentials
