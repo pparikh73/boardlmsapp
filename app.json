@@ -13,7 +13,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.board.academy",
+      "bundleIdentifier": "com.base69a73ce716a9ce7953fb465f.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
