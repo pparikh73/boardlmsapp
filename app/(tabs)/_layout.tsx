@@ -1,40 +1,32 @@
 import { Tabs } from 'expo-router';
-import { useColorScheme } from 'react-native';
+import { Text } from 'react-native';
 import { BRAND } from '../../constants/skilljar';
 
-// Simple inline SVG-like tab icons using Text (no icon library needed)
-// Replace with react-native-vector-icons or @expo/vector-icons if desired
-function TabIcon({ symbol, focused }: { symbol: string; focused: boolean }) {
-  return null; // icons are via tabBarIcon label — see below
-}
-
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: BRAND.primary,
-        tabBarInactiveTintColor: isDark ? '#484f58' : '#999999',
+        tabBarActiveTintColor: BRAND.white,
+        tabBarInactiveTintColor: BRAND.mid1,
         tabBarStyle: {
-          backgroundColor: isDark ? '#161b22' : '#ffffff',
-          borderTopColor: isDark ? '#30363d' : '#e0e0e0',
+          backgroundColor: BRAND.dark1,   // #252c43 — Board dark neutral
+          borderTopColor: BRAND.dark2,
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
+          height: 64,
+          paddingBottom: 10,
           paddingTop: 6,
         },
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: '500',
+          fontWeight: '600',
+          letterSpacing: 0.2,
         },
         headerStyle: {
-          backgroundColor: BRAND.primary,
+          backgroundColor: BRAND.primary,  // #253e7d — Board Blue
           shadowColor: 'transparent',
           elevation: 0,
         },
-        headerTintColor: '#ffffff',
+        headerTintColor: BRAND.white,
         headerTitleStyle: {
           fontWeight: '700',
           fontSize: 17,
@@ -45,37 +37,46 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarLabel: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            // Using a unicode symbol as a minimal icon — swap for a proper icon library later
-            <HomeIcon color={color} size={size} />
-          ),
+          title: 'Board Academy',
+          tabBarLabel: 'Academy',
+          tabBarIcon: ({ color, size }) => <AcademyIcon color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="community"
+        options={{
+          title: 'Board Community',
+          tabBarLabel: 'Community',
+          tabBarIcon: ({ color, size }) => <CommunityIcon color={color} size={size} />,
+          headerShown: false,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
-          tabBarLabel: 'Profile',
-          tabBarIcon: ({ color, size }) => <ProfileIcon color={color} size={size} />,
+          title: 'Settings',
+          tabBarLabel: 'Settings',
+          tabBarIcon: ({ color, size }) => <SettingsIcon color={color} size={size} />,
+          headerShown: false,
         }}
+      />
+      {/* Hidden — redirects to home */}
+      <Tabs.Screen
+        name="my-learning"
+        options={{ href: null }}
       />
     </Tabs>
   );
 }
 
-// Minimal icon components using Text — replace with a proper icon library for production
-import { Text } from 'react-native';
-
-function HomeIcon({ color, size }: { color: string; size: number }) {
-  return <Text style={{ fontSize: size - 2, color }}>⌂</Text>;
+function AcademyIcon({ color, size }: { color: string; size: number }) {
+  return <Text style={{ fontSize: size - 2, color }}>🎓</Text>;
 }
 
-function BookIcon({ color, size }: { color: string; size: number }) {
-  return <Text style={{ fontSize: size - 2, color }}>📖</Text>;
+function CommunityIcon({ color, size }: { color: string; size: number }) {
+  return <Text style={{ fontSize: size - 2, color }}>👥</Text>;
 }
 
-function ProfileIcon({ color, size }: { color: string; size: number }) {
-  return <Text style={{ fontSize: size - 2, color }}>👤</Text>;
+function SettingsIcon({ color, size }: { color: string; size: number }) {
+  return <Text style={{ fontSize: size - 2, color }}>⚙️</Text>;
 }

@@ -4,19 +4,15 @@ import {
   StyleSheet,
   SafeAreaView,
   Linking,
-  Pressable,
-  useColorScheme,
-  Platform,
+  TouchableOpacity,
   Image,
+  ScrollView,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import LoginButton from '../components/LoginButton';
 import { BRAND, SUPPORT_EMAIL, AUTH_URLS } from '../constants/skilljar';
 
 export default function LoginScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-
   function handleSSO(method: 'customerPartner' | 'employee') {
     router.push({ pathname: '/sso-webview', params: { url: AUTH_URLS[method], method } });
   }
@@ -25,74 +21,88 @@ export default function LoginScreen() {
     router.push('/guest-login');
   }
 
-  function handleSignUp() {
-    Linking.openURL('https://academy.board.com');
-  }
-
-  function handleSupport() {
-    Linking.openURL(`mailto:${SUPPORT_EMAIL}`);
-  }
-
   return (
-    <SafeAreaView style={[styles.safe, isDark && styles.safeDark]}>
-      <View style={styles.container}>
-        {/* Header / Branding */}
+    <SafeAreaView style={styles.safe}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header: logo + title side by side */}
         <View style={styles.header}>
           <Image
             source={require('../assets/icon.png')}
-            style={styles.logoImage}
+            style={styles.logo}
             resizeMode="contain"
           />
-          <Text style={[styles.title, isDark && styles.titleDark]}>Board Academy</Text>
-          <Text style={[styles.subtitle, isDark && styles.subtitleDark]}>
-            Your learning journey starts here
-          </Text>
+          <View style={styles.headerText}>
+            <Text style={styles.title}>Board Academy</Text>
+            <Text style={styles.subtitle}>Choose how you'd like to sign in</Text>
+          </View>
         </View>
 
-        {/* Auth Buttons */}
-        <View style={styles.buttons}>
-          <LoginButton
-            label="Customer / Partner Login"
+        {/* Auth cards */}
+        <View style={styles.cards}>
+          {/* Customer / Partner Login — primary CTA with corporate gradient */}
+          <TouchableOpacity
+            activeOpacity={0.85}
             onPress={() => handleSSO('customerPartner')}
-            variant="primary"
-          />
+          >
+            <LinearGradient
+              colors={BRAND.gradientPurpleBlue}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.cardGradient}
+            >
+              <View style={styles.cardInner}>
+                <View>
+                  <Text style={styles.cardTitleLight}>Customer / Partner Login</Text>
+                  <Text style={styles.cardSubtitleLight}>Sign in with your Board account</Text>
+                </View>
+                <Text style={styles.chevronLight}>›</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
 
-          <View style={styles.divider}>
-            <View style={[styles.dividerLine, isDark && styles.dividerLineDark]} />
-            <Text style={[styles.dividerText, isDark && styles.dividerTextDark]}>or</Text>
-            <View style={[styles.dividerLine, isDark && styles.dividerLineDark]} />
-          </View>
-
-          <LoginButton
-            label="Sign in with Guest Account"
-            onPress={handleGuestLogin}
-            variant="outline"
-          />
-
-          <LoginButton
-            label="Employee Login"
+          {/* Employee Login */}
+          <TouchableOpacity
+            style={styles.cardOutline}
+            activeOpacity={0.8}
             onPress={() => handleSSO('employee')}
-            variant="ghost"
-            style={styles.employeeButton}
-          />
+          >
+            <View style={styles.cardInner}>
+              <View style={styles.cardBody}>
+                <Text style={styles.cardTitleDark}>Employee Login</Text>
+                <Text style={styles.cardSubtitleDark}>Sign in via SSO / Boardway</Text>
+              </View>
+              <Text style={styles.chevronDark}>›</Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Guest Sign-in */}
+          <TouchableOpacity
+            style={styles.cardOutline}
+            activeOpacity={0.8}
+            onPress={handleGuestLogin}
+          >
+            <View style={styles.cardInner}>
+              <View style={styles.cardBody}>
+                <Text style={styles.cardTitleDark}>Guest Sign-in</Text>
+                <Text style={styles.cardSubtitleDark}>Access as a guest user</Text>
+              </View>
+              <Text style={styles.chevronDark}>›</Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* Footer */}
-        <View style={styles.footer}>
-          <Pressable onPress={handleSignUp}>
-            <Text style={styles.footerText}>
-              Don't have an account?{' '}
-              <Text style={styles.footerLink}>Sign Up</Text>
-            </Text>
-          </Pressable>
-
-          <Pressable onPress={handleSupport} style={styles.supportLink}>
-            <Text style={[styles.footerText, styles.supportText]}>
-              Need help? {SUPPORT_EMAIL}
-            </Text>
-          </Pressable>
-        </View>
-      </View>
+        <TouchableOpacity
+          style={styles.footer}
+          onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
+        >
+          <Text style={styles.footerText}>Need help? {SUPPORT_EMAIL}</Text>
+        </TouchableOpacity>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -100,90 +110,109 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: BRAND.white,
   },
-  safeDark: {
-    backgroundColor: '#0d1117',
+  scroll: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingBottom: 32,
+    justifyContent: 'center',
   },
-  container: {
-    flex: 1,
-    paddingHorizontal: 28,
-    justifyContent: 'space-between',
-    paddingBottom: Platform.OS === 'android' ? 24 : 0,
-  },
+  // Header row
   header: {
-    alignItems: 'center',
-    paddingTop: 60,
-    paddingBottom: 16,
-  },
-  logoImage: {
-    width: 120,
-    height: 120,
-    marginBottom: 16,
-    borderRadius: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: BRAND.primary,
-    letterSpacing: -0.5,
-  },
-  titleDark: {
-    color: '#58b8f0',
-  },
-  subtitle: {
-    fontSize: 15,
-    color: BRAND.textSecondary,
-    marginTop: 8,
-  },
-  subtitleDark: {
-    color: '#8b949e',
-  },
-  buttons: {
-    gap: 12,
-  },
-  divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginVertical: 4,
+    marginBottom: 40,
+    marginTop: 32,
   },
-  dividerLine: {
+  logo: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    marginRight: 16,
+  },
+  headerText: {
     flex: 1,
-    height: 1,
-    backgroundColor: '#e0e0e0',
   },
-  dividerLineDark: {
-    backgroundColor: '#30363d',
+  title: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: BRAND.dark1,
+    letterSpacing: -0.4,
   },
-  dividerText: {
-    fontSize: 13,
-    color: BRAND.textSecondary,
-  },
-  dividerTextDark: {
-    color: '#8b949e',
-  },
-  employeeButton: {
+  subtitle: {
+    fontSize: 14,
+    color: BRAND.mid2,
     marginTop: 4,
+    lineHeight: 20,
   },
-  footer: {
+  // Auth cards
+  cards: {
+    gap: 14,
+  },
+  // Gradient card (primary CTA)
+  cardGradient: {
+    borderRadius: 16,
+    padding: 1,
+  },
+  // Plain outlined card
+  cardOutline: {
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: BRAND.light1,
+    backgroundColor: BRAND.white,
+    overflow: 'hidden',
+  },
+  cardInner: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingBottom: 12,
+    justifyContent: 'space-between',
+    padding: 18,
+    borderRadius: 15,
+    backgroundColor: BRAND.white,
+  },
+  cardBody: {
+    flex: 1,
+  },
+  cardTitleLight: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: BRAND.white,
+    marginBottom: 3,
+  },
+  cardSubtitleLight: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.75)',
+  },
+  cardTitleDark: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: BRAND.primary,
+    marginBottom: 3,
+  },
+  cardSubtitleDark: {
+    fontSize: 13,
+    color: BRAND.mid2,
+  },
+  chevronLight: {
+    fontSize: 24,
+    color: BRAND.white,
+    fontWeight: '300',
+    marginLeft: 12,
+  },
+  chevronDark: {
+    fontSize: 24,
+    color: BRAND.primary,
+    fontWeight: '300',
+    marginLeft: 12,
+  },
+  // Footer
+  footer: {
+    marginTop: 36,
+    alignItems: 'center',
   },
   footerText: {
     fontSize: 14,
-    color: BRAND.textSecondary,
-    textAlign: 'center',
-  },
-  footerLink: {
-    color: BRAND.primary,
-    fontWeight: '600',
-  },
-  supportLink: {
-    marginTop: 2,
-  },
-  supportText: {
-    fontSize: 13,
+    color: BRAND.mid2,
   },
 });
