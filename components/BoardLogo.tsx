@@ -14,9 +14,9 @@ interface BoardLogoProps {
 }
 
 // Full wordmark: 346 × 117
-// "b" icon only: uses first ~65 pts of the 346 wide canvas
+// "b" icon only: rightmost bowl of the "b" reaches ~x=74, use 78 for breathing room
 const FULL_W = 346;
-const ICON_W = 65;
+const ICON_W = 78;
 const FULL_H = 117;
 
 export default function BoardLogo({ width = 120, iconOnly = false }: BoardLogoProps) {
