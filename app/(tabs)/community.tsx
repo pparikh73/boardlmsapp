@@ -6,13 +6,13 @@ import {
   SafeAreaView,
   ScrollView,
   TouchableOpacity,
-  Image,
   StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import LMSWebView from '../../components/LMSWebView';
-import { BRAND, COMMUNITY_SECTIONS, AUTH_URLS, SUPPORT_EMAIL } from '../../constants/skilljar';
+import BoardLogo from '../../components/BoardLogo';
+import { BRAND, COMMUNITY_SECTIONS, SUPPORT_EMAIL } from '../../constants/skilljar';
 import { logout } from '../../services/auth';
 
 export default function CommunityScreen() {
@@ -51,11 +51,9 @@ export default function CommunityScreen() {
           style={styles.header}
         >
           <View style={styles.headerRow}>
-            <Image
-              source={require('../../assets/icon.png')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
+            <View style={styles.logo}>
+              <BoardLogo width={90} />
+            </View>
             <View style={styles.headerText}>
               <Text style={styles.headerTitle}>Board Community</Text>
               <Text style={styles.headerSubtitle}>Connect, learn & collaborate</Text>
@@ -114,10 +112,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logo: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
     marginRight: 14,
+    justifyContent: 'center',
   },
   headerText: {
     flex: 1,
