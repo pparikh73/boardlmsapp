@@ -15,14 +15,10 @@ export default function RootLayout() {
 
   useEffect(() => {
     async function prepare() {
-      const session = await getSession();
+      await getSession(); // warm the session cache
       await SplashScreen.hideAsync();
       setReady(true);
-      if (session) {
-        router.replace('/(tabs)');
-      } else {
-        router.replace('/login');
-      }
+      router.replace('/(tabs)'); // tabs always show; each tab handles its own auth state
     }
     prepare();
   }, []);

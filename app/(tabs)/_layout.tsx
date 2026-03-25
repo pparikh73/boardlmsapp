@@ -1,19 +1,23 @@
 import { Tabs } from 'expo-router';
-import { Text } from 'react-native';
-import { BRAND } from '../../constants/skilljar';
+import { Ionicons } from '@expo/vector-icons';
+
+// #F39325 = orange from the Board "b" logo lower stripe gradient (official brand asset)
+const ACTIVE = '#F39325';
+const INACTIVE = '#5c6584';
+const TAB_BG = '#161b2a';
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: BRAND.white,
-        tabBarInactiveTintColor: BRAND.mid1,
+        headerShown: false,
+        tabBarActiveTintColor: ACTIVE,
+        tabBarInactiveTintColor: INACTIVE,
         tabBarStyle: {
-          backgroundColor: BRAND.dark1,   // #252c43 — Board dark neutral
-          borderTopColor: BRAND.dark2,
-          borderTopWidth: 1,
-          height: 64,
-          paddingBottom: 10,
+          backgroundColor: TAB_BG,
+          borderTopWidth: 0,
+          height: 68,
+          paddingBottom: 12,
           paddingTop: 6,
         },
         tabBarLabelStyle: {
@@ -21,62 +25,36 @@ export default function TabLayout() {
           fontWeight: '600',
           letterSpacing: 0.2,
         },
-        headerStyle: {
-          backgroundColor: BRAND.primary,  // #253e7d — Board Blue
-          shadowColor: 'transparent',
-          elevation: 0,
-        },
-        headerTintColor: BRAND.white,
-        headerTitleStyle: {
-          fontWeight: '700',
-          fontSize: 17,
-        },
-        headerTitle: 'Board Academy',
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Board Academy',
           tabBarLabel: 'Academy',
-          tabBarIcon: ({ color, size }) => <AcademyIcon color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="school-outline" size={size + 2} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="community"
         options={{
-          title: 'Board Community',
           tabBarLabel: 'Community',
-          tabBarIcon: ({ color, size }) => <CommunityIcon color={color} size={size} />,
-          headerShown: false,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="people-outline" size={size + 2} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Settings',
           tabBarLabel: 'Settings',
-          tabBarIcon: ({ color, size }) => <SettingsIcon color={color} size={size} />,
-          headerShown: false,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings-outline" size={size + 2} color={color} />
+          ),
         }}
       />
-      {/* Hidden — redirects to home */}
-      <Tabs.Screen
-        name="my-learning"
-        options={{ href: null }}
-      />
+      <Tabs.Screen name="my-learning" options={{ href: null }} />
     </Tabs>
   );
-}
-
-function AcademyIcon({ color, size }: { color: string; size: number }) {
-  return <Text style={{ fontSize: size - 2, color }}>🎓</Text>;
-}
-
-function CommunityIcon({ color, size }: { color: string; size: number }) {
-  return <Text style={{ fontSize: size - 2, color }}>👥</Text>;
-}
-
-function SettingsIcon({ color, size }: { color: string; size: number }) {
-  return <Text style={{ fontSize: size - 2, color }}>⚙️</Text>;
 }

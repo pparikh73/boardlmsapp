@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@expo/metro-runtime": "~55.0.6",
+    "@expo/vector-icons": "^15.0.2",
     "expo": "~55.0.5",
     "expo-linear-gradient": "~55.0.9",
     "expo-linking": "~55.0.7",
