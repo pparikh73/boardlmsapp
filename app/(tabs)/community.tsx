@@ -11,7 +11,7 @@ import {
 import { router } from 'expo-router';
 import BoardLogo from '../../components/BoardLogo';
 import LMSWebView from '../../components/LMSWebView';
-import { BRAND, COMMUNITY_AUTH_URL, COMMUNITY_BASE_URL, COMMUNITY_SECTIONS } from '../../constants/skilljar';
+import { BRAND, COMMUNITY_AUTH_URL, COMMUNITY_EMPLOYEE_AUTH_URL, COMMUNITY_BASE_URL, COMMUNITY_SECTIONS } from '../../constants/skilljar';
 import { logout } from '../../services/auth';
 
 const CARD_COLORS = {

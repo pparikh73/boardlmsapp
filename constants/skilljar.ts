@@ -4,7 +4,9 @@ export const SKILLJAR_BASE_URL = 'https://accounts.skilljar.com';
 export const SKILLJAR_CONTENT_URL = 'https://academy.board.com';
 export const COMMUNITY_BASE_URL = 'https://community.board.com';
 // Community uses Azure AD B2C — separate from Academy's Skilljar SSO
-export const COMMUNITY_AUTH_URL = 'https://community.board.com/entry/signin';
+export const COMMUNITY_AUTH_URL = 'https://community.board.com/entry/signin?target=https%3A%2F%2Fcommunity.board.com%2F';
+// Community employee login uses Azure AD SAML (Boardway/corporate SSO)
+export const COMMUNITY_EMPLOYEE_AUTH_URL = 'https://community.board.com/entry/saml/AzureADSAML?Target=https%3A%2F%2Fboard.vanillacommunities.com%2F';
 
 // Auth endpoints
 export const AUTH_URLS = {
