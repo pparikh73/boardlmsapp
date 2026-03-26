@@ -14,12 +14,24 @@ export default function SSOWebViewScreen() {
   async function handleNavigationChange(nav: WebViewNavigation) {
     if (authed) return;
 
-    // Community auth (Azure AD B2C) — complete when back on community.board.com
-    // and no longer in the /entry/ auth flow or on the B2C login domain
+    // Community Customer/Partner auth (Azure AD B2C)
     if (method === 'community') {
       if (
         nav.url.startsWith(COMMUNITY_BASE_URL) &&
         !nav.url.includes('/entry/')
+      ) {
+        setAuthed(true);
+        router.replace('/(tabs)/community');
+      }
+      return;
+    }
+
+    // Community Employee auth (Azure AD SAML via Boardway)
+    // After SAML completes, lands on board.vanillacommunities.com or community.board.com
+    if (method === 'community-employee') {
+      if (
+        nav.url.startsWith('https://board.vanillacommunities.com') ||
+        (nav.url.startsWith(COMMUNITY_BASE_URL) && !nav.url.includes('/entry/') && !nav.url.includes('/saml/'))
       ) {
         setAuthed(true);
         router.replace('/(tabs)/community');

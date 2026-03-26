@@ -86,7 +86,7 @@ export default function CommunityTab() {
               borderColor: CARD_COLORS.employeeBorder,
             }]}
             activeOpacity={0.8}
-            onPress={() => router.push({ pathname: '/sso-webview', params: { url: COMMUNITY_AUTH_URL, method: 'community' } })}
+            onPress={() => router.push({ pathname: '/sso-webview', params: { url: COMMUNITY_EMPLOYEE_AUTH_URL, method: 'community-employee' } })}
           >
             <View style={styles.cardBody}>
               <Text style={[styles.cardTitle, { color: CARD_COLORS.employeeText }]}>Employee Login</Text>
