@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
 import * as WebBrowser from 'expo-web-browser';
@@ -7,12 +7,22 @@ import { BRAND, AUTH_URLS } from '../constants/skilljar';
 interface LMSWebViewProps {
   url: string;
   onLogout?: () => void;
+  isFocused?: boolean;
 }
 
-export default function LMSWebView({ url, onLogout }: LMSWebViewProps) {
+export default function LMSWebView({ url, onLogout, isFocused = true }: LMSWebViewProps) {
   const webViewRef = useRef<WebView>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Pause all videos when the tab loses focus to free GPU/decoder memory
+  useEffect(() => {
+    if (!isFocused) {
+      webViewRef.current?.injectJavaScript(
+        `document.querySelectorAll('video').forEach(function(v){try{v.pause();}catch(e){}});true;`
+      );
+    }
+  }, [isFocused]);
 
   // Allow-list of URL prefixes that should stay inside the WebView.
   // Anything outside this list opens in SFSafariViewController (in-app browser).
@@ -73,8 +83,8 @@ export default function LMSWebView({ url, onLogout }: LMSWebViewProps) {
         // KEY FIX: prevents window.open() / target="_blank" from launching Safari.
         // WKWebView will navigate the current view instead of opening a new window.
         setSupportMultipleWindows={false}
-        // Prevent horizontal scroll; hide Skilljar "Powered by" footer;
-        // override window.open to stay in-app as a belt-and-suspenders measure.
+        // Auto-recover if the WKWebView content process is terminated by iOS due to memory pressure
+        onContentProcessDidTerminate={() => webViewRef.current?.reload()}
         injectedJavaScript={`
           (function() {
             var style = document.createElement('style');
@@ -86,11 +96,22 @@ export default function LMSWebView({ url, onLogout }: LMSWebViewProps) {
 
             // Redirect window.open() calls to same-window navigation so they
             // stay inside the WebView rather than launching Mobile Safari.
-            var _originalOpen = window.open;
             window.open = function(url, target, features) {
               if (url) { window.location.href = url; }
               return null;
             };
+
+            // Release video decoder memory when a video finishes playing.
+            // Clears the src so iOS can reclaim the decoded buffer immediately.
+            document.addEventListener('ended', function(e) {
+              var v = e.target;
+              if (v && v.tagName === 'VIDEO') {
+                var poster = v.poster;
+                v.src = '';
+                v.load();
+                if (poster) v.poster = poster;
+              }
+            }, true);
           })();
           true;
         `}

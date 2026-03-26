@@ -28,10 +28,13 @@ const CARD_COLORS = {
 
 export default function AcademyTab() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const [isFocused, setIsFocused] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
+      setIsFocused(true);
       getSession().then(setSession);
+      return () => setIsFocused(false);
     }, []),
   );
 
@@ -45,7 +48,7 @@ export default function AcademyTab() {
 
   // Authenticated → show Academy WebView
   if (session) {
-    return <LMSWebView url={TAB_URLS.home} onLogout={handleLogout} />;
+    return <LMSWebView url={TAB_URLS.home} onLogout={handleLogout} isFocused={isFocused} />;
   }
 
   // Not authenticated → show Academy landing with login cards
