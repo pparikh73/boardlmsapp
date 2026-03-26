@@ -3,6 +3,8 @@ export const SKILLJAR_DOMAIN = '34t7lq90dtcj7';
 export const SKILLJAR_BASE_URL = 'https://accounts.skilljar.com';
 export const SKILLJAR_CONTENT_URL = 'https://academy.board.com';
 export const COMMUNITY_BASE_URL = 'https://community.board.com';
+// Community uses Azure AD B2C — separate from Academy's Skilljar SSO
+export const COMMUNITY_AUTH_URL = 'https://community.board.com/entry/signin';
 
 // Auth endpoints
 export const AUTH_URLS = {

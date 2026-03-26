@@ -11,7 +11,7 @@ import {
 import { router } from 'expo-router';
 import BoardLogo from '../../components/BoardLogo';
 import LMSWebView from '../../components/LMSWebView';
-import { BRAND, AUTH_URLS, COMMUNITY_SECTIONS, SUPPORT_EMAIL } from '../../constants/skilljar';
+import { BRAND, COMMUNITY_AUTH_URL, COMMUNITY_BASE_URL, COMMUNITY_SECTIONS } from '../../constants/skilljar';
 import { logout } from '../../services/auth';
 
 const CARD_COLORS = {
@@ -64,13 +64,14 @@ export default function CommunityTab() {
 
         {/* Auth cards */}
         <View style={styles.cards}>
+          {/* Customer/Partner and Employee both use community B2C login */}
           <TouchableOpacity
             style={[styles.card, {
               backgroundColor: CARD_COLORS.customerBg,
               borderColor: CARD_COLORS.customerBorder,
             }]}
             activeOpacity={0.8}
-            onPress={() => router.push({ pathname: '/sso-webview', params: { url: AUTH_URLS.customerPartner, method: 'customerPartner' } })}
+            onPress={() => router.push({ pathname: '/sso-webview', params: { url: COMMUNITY_AUTH_URL, method: 'community' } })}
           >
             <View style={styles.cardBody}>
               <Text style={[styles.cardTitle, { color: BRAND.dark1 }]}>Customer / Partner Login</Text>
@@ -85,7 +86,7 @@ export default function CommunityTab() {
               borderColor: CARD_COLORS.employeeBorder,
             }]}
             activeOpacity={0.8}
-            onPress={() => router.push({ pathname: '/sso-webview', params: { url: AUTH_URLS.employee, method: 'employee' } })}
+            onPress={() => router.push({ pathname: '/sso-webview', params: { url: COMMUNITY_AUTH_URL, method: 'community' } })}
           >
             <View style={styles.cardBody}>
               <Text style={[styles.cardTitle, { color: CARD_COLORS.employeeText }]}>Employee Login</Text>
@@ -94,17 +95,18 @@ export default function CommunityTab() {
             <Text style={[styles.chevron, { color: CARD_COLORS.employeeText }]}>›</Text>
           </TouchableOpacity>
 
+          {/* Guest browses community without login */}
           <TouchableOpacity
             style={[styles.card, {
               backgroundColor: CARD_COLORS.guestBg,
               borderColor: CARD_COLORS.guestBorder,
             }]}
             activeOpacity={0.8}
-            onPress={() => router.push('/guest-login')}
+            onPress={() => setActiveUrl(COMMUNITY_BASE_URL)}
           >
             <View style={styles.cardBody}>
               <Text style={[styles.cardTitle, { color: CARD_COLORS.guestText }]}>Guest Sign-in</Text>
-              <Text style={styles.cardSub}>Access as a guest user</Text>
+              <Text style={styles.cardSub}>Browse community as a guest</Text>
             </View>
             <Text style={[styles.chevron, { color: CARD_COLORS.guestText }]}>›</Text>
           </TouchableOpacity>

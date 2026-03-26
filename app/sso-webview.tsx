@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet, SafeAreaView, Pressable, Text } from 'react-native';
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import { router, useLocalSearchParams } from 'expo-router';
-import { BRAND, SKILLJAR_CONTENT_URL } from '../constants/skilljar';
+import { BRAND, SKILLJAR_CONTENT_URL, COMMUNITY_BASE_URL } from '../constants/skilljar';
 import { saveSessionByMethod } from '../services/auth';
 
 export default function SSOWebViewScreen() {
@@ -12,9 +12,23 @@ export default function SSOWebViewScreen() {
   const [authed, setAuthed] = useState(false);
 
   async function handleNavigationChange(nav: WebViewNavigation) {
-    // Auth is complete when we land on the content domain and no longer on an /auth/ path
+    if (authed) return;
+
+    // Community auth (Azure AD B2C) — complete when back on community.board.com
+    // and no longer in the /entry/ auth flow or on the B2C login domain
+    if (method === 'community') {
+      if (
+        nav.url.startsWith(COMMUNITY_BASE_URL) &&
+        !nav.url.includes('/entry/')
+      ) {
+        setAuthed(true);
+        router.replace('/(tabs)/community');
+      }
+      return;
+    }
+
+    // Academy auth (Skilljar SSO) — complete when on academy.board.com outside /auth/
     if (
-      !authed &&
       nav.url.startsWith(SKILLJAR_CONTENT_URL) &&
       !nav.url.includes('/auth/')
     ) {
