@@ -7,6 +7,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Linking,
+  StatusBar,
 } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import BoardLogo from '../../components/BoardLogo';
@@ -46,9 +47,14 @@ export default function AcademyTab() {
     setSession(null);
   }
 
-  // Authenticated → show Academy WebView
+  // Authenticated → show Academy WebView with safe area so Skilljar nav clears the status bar
   if (session) {
-    return <LMSWebView url={TAB_URLS.home} onLogout={handleLogout} isFocused={isFocused} />;
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#1a2444' }}>
+        <StatusBar barStyle="light-content" />
+        <LMSWebView url={TAB_URLS.home} onLogout={handleLogout} isFocused={isFocused} />
+      </SafeAreaView>
+    );
   }
 
   // Not authenticated → show Academy landing with login cards
