@@ -83,6 +83,7 @@ export default function LMSWebView({ url, onLogout, isFocused = true }: LMSWebVi
         // KEY FIX: prevents window.open() / target="_blank" from launching Safari.
         // WKWebView will navigate the current view instead of opening a new window.
         setSupportMultipleWindows={false}
+        userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
         // Auto-recover if the WKWebView content process is terminated by iOS due to memory pressure
         onContentProcessDidTerminate={() => webViewRef.current?.reload()}
         injectedJavaScript={`
