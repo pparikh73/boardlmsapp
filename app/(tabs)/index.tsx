@@ -8,9 +8,10 @@ import {
   TouchableOpacity,
   Linking,
   StatusBar,
+  Image,
 } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
-import BoardLogo from '../../components/BoardLogo';
+// BoardLogo replaced by official PNG asset
 import LMSWebView from '../../components/LMSWebView';
 import { getSession, logout, type Session } from '../../services/auth';
 import { BRAND, AUTH_URLS, TAB_URLS, SUPPORT_EMAIL } from '../../constants/skilljar';
@@ -67,11 +68,12 @@ export default function AcademyTab() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <BoardLogo width={52} iconOnly />
-          <View style={styles.headerTextCol}>
-            <Text style={styles.title}>Board Academy</Text>
-            <Text style={styles.subtitle}>Choose how you'd like to sign in</Text>
-          </View>
+          <Image
+            source={require('../../assets/Board Academy logo.png')}
+            style={styles.headerLogo}
+            resizeMode="contain"
+          />
+          <Text style={styles.subtitle}>Choose how you'd like to sign in</Text>
         </View>
 
         {/* Auth cards */}
@@ -146,24 +148,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   header: {
-    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 44,
-    gap: 16,
   },
-  headerTextCol: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: BRAND.dark1,
-    letterSpacing: -0.3,
+  headerLogo: {
+    width: 260,
+    height: 110,
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 13,
     color: BRAND.mid2,
-    marginTop: 4,
     lineHeight: 18,
   },
   cards: {
