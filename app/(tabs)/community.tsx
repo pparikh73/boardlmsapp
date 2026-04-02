@@ -72,9 +72,19 @@ export default function CommunityTab() {
         `}
         injectedJavaScript={`
           (function() {
+            function applyFix() {
+              document.documentElement.style.setProperty('overflow-x', 'hidden', 'important');
+              document.body.style.setProperty('overflow-x', 'hidden', 'important');
+              document.body.style.setProperty('max-width', '100vw', 'important');
+              document.body.style.setProperty('width', '100%', 'important');
+            }
+            applyFix();
             var style = document.createElement('style');
-            style.textContent = 'html, body { overflow-x: hidden !important; width: 100% !important; max-width: 100vw !important; } * { box-sizing: border-box !important; }';
+            style.textContent = 'html, body { overflow-x: hidden !important; width: 100% !important; max-width: 100vw !important; }';
             document.head.appendChild(style);
+            // Re-apply whenever the DOM changes (catches dynamically injected wide elements)
+            var observer = new MutationObserver(applyFix);
+            observer.observe(document.body, { childList: true, subtree: true });
             window.open = function(url) { if (url) window.location.href = url; return null; };
           })();
           true;
