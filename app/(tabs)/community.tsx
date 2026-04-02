@@ -57,7 +57,12 @@ export default function CommunityTab() {
         setSupportMultipleWindows={false}
         userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
         injectedJavaScript={`
-          window.open = function(url) { if (url) window.location.href = url; return null; };
+          (function() {
+            var style = document.createElement('style');
+            style.innerHTML = 'html, body { max-width: 100% !important; overflow-x: hidden !important; }';
+            document.head.appendChild(style);
+            window.open = function(url) { if (url) window.location.href = url; return null; };
+          })();
           true;
         `}
       />
