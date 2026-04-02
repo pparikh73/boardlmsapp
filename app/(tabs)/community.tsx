@@ -56,10 +56,24 @@ export default function CommunityTab() {
         allowsBackForwardNavigationGestures
         setSupportMultipleWindows={false}
         userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        injectedJavaScriptBeforeContentLoaded={`
+          (function() {
+            var meta = document.querySelector('meta[name="viewport"]');
+            if (meta) {
+              meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0';
+            } else {
+              var m = document.createElement('meta');
+              m.name = 'viewport';
+              m.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0';
+              document.head.appendChild(m);
+            }
+          })();
+          true;
+        `}
         injectedJavaScript={`
           (function() {
             var style = document.createElement('style');
-            style.innerHTML = 'html, body { max-width: 100% !important; overflow-x: hidden !important; }';
+            style.textContent = 'html, body { overflow-x: hidden !important; width: 100% !important; max-width: 100vw !important; } * { box-sizing: border-box !important; }';
             document.head.appendChild(style);
             window.open = function(url) { if (url) window.location.href = url; return null; };
           })();
