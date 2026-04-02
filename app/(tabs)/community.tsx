@@ -72,18 +72,31 @@ export default function CommunityTab() {
         `}
         injectedJavaScript={`
           (function() {
-            function applyFix() {
-              document.documentElement.style.setProperty('overflow-x', 'hidden', 'important');
-              document.body.style.setProperty('overflow-x', 'hidden', 'important');
-              document.body.style.setProperty('max-width', '100vw', 'important');
-              document.body.style.setProperty('width', '100%', 'important');
-            }
-            applyFix();
+            // Base styles
             var style = document.createElement('style');
             style.textContent = 'html, body { overflow-x: hidden !important; width: 100% !important; max-width: 100vw !important; }';
             document.head.appendChild(style);
-            // Re-apply whenever the DOM changes (catches dynamically injected wide elements)
-            var observer = new MutationObserver(applyFix);
+
+            // Find flex containers that overflow the viewport and force them to wrap (2 per row)
+            function fixOverflowingFlex() {
+              var vw = window.innerWidth || document.documentElement.clientWidth;
+              document.querySelectorAll('*').forEach(function(el) {
+                if (el.scrollWidth > vw + 10) {
+                  var cs = window.getComputedStyle(el);
+                  if ((cs.display === 'flex' || cs.display === 'inline-flex') && cs.flexWrap === 'nowrap') {
+                    el.style.setProperty('flex-wrap', 'wrap', 'important');
+                    Array.from(el.children).forEach(function(child) {
+                      child.style.setProperty('flex', '0 0 50%', 'important');
+                      child.style.setProperty('max-width', '50%', 'important');
+                      child.style.setProperty('box-sizing', 'border-box', 'important');
+                    });
+                  }
+                }
+              });
+            }
+
+            fixOverflowingFlex();
+            var observer = new MutationObserver(fixOverflowingFlex);
             observer.observe(document.body, { childList: true, subtree: true });
             window.open = function(url) { if (url) window.location.href = url; return null; };
           })();
