@@ -79,7 +79,7 @@ export default function LMSWebView({ url, onLogout, isFocused = true }: LMSWebVi
         overScrollMode="never"
         directionalLockEnabled
         allowsInlineMediaPlayback
-        mediaPlaybackRequiresUserAction={true}
+        mediaPlaybackRequiresUserAction={false}
         // KEY FIX: prevents window.open() / target="_blank" from launching Safari.
         // WKWebView will navigate the current view instead of opening a new window.
         setSupportMultipleWindows={false}
@@ -103,15 +103,23 @@ export default function LMSWebView({ url, onLogout, isFocused = true }: LMSWebVi
               return null;
             };
 
-            // Release video decoder memory when a video finishes playing.
-            // Clears the src so iOS can reclaim the decoded buffer immediately.
+            // Only release video memory if the user actually played the video.
+            // Tracks play events so autoplay-ended or failed-load events don't
+            // clear thumbnails on videos the user never interacted with.
+            var userPlayedVideos = new WeakSet();
+            document.addEventListener('play', function(e) {
+              if (e.target && e.target.tagName === 'VIDEO') {
+                userPlayedVideos.add(e.target);
+              }
+            }, true);
             document.addEventListener('ended', function(e) {
               var v = e.target;
-              if (v && v.tagName === 'VIDEO') {
+              if (v && v.tagName === 'VIDEO' && userPlayedVideos.has(v)) {
                 var poster = v.poster;
                 v.src = '';
                 v.load();
                 if (poster) v.poster = poster;
+                userPlayedVideos.delete(v);
               }
             }, true);
           })();
