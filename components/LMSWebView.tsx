@@ -96,6 +96,18 @@ export default function LMSWebView({ url, onLogout, isFocused = true }: LMSWebVi
             ].join('');
             document.head.appendChild(style);
 
+            // Ensure iframes (Vimeo, Synthesia, etc.) receive the correct Referer header
+            // so domain-restricted embeds load correctly in WKWebView
+            var meta = document.querySelector('meta[name="referrer"]');
+            if (meta) {
+              meta.setAttribute('content', 'origin');
+            } else {
+              var refMeta = document.createElement('meta');
+              refMeta.name = 'referrer';
+              refMeta.content = 'origin';
+              document.head.appendChild(refMeta);
+            }
+
             // Redirect window.open() calls to same-window navigation so they
             // stay inside the WebView rather than launching Mobile Safari.
             window.open = function(url, target, features) {

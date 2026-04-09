@@ -75,6 +75,17 @@ export default function CommunityTab() {
             // Base styles
             var style = document.createElement('style');
             style.textContent = 'html, body { overflow-x: hidden !important; width: 100% !important; max-width: 100vw !important; }';
+
+            // Ensure iframes (Vimeo, Synthesia, etc.) receive the correct Referer header
+            var meta = document.querySelector('meta[name="referrer"]');
+            if (meta) {
+              meta.setAttribute('content', 'origin');
+            } else {
+              var refMeta = document.createElement('meta');
+              refMeta.name = 'referrer';
+              refMeta.content = 'origin';
+              document.head.appendChild(refMeta);
+            }
             document.head.appendChild(style);
 
             // Find flex containers that overflow the viewport and force them to wrap (2 per row)
