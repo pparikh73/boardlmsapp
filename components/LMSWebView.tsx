@@ -100,23 +100,7 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           overScrollMode="never"
           directionalLockEnabled
           allowsInlineMediaPlayback
-          mediaPlaybackRequiresUserAction={false}
-          injectedJavaScriptBeforeContentLoaded={`
-            (function() {
-              var originalPlay = HTMLMediaElement.prototype.play;
-              var userInteracted = false;
-              document.addEventListener('touchstart', function() {
-                userInteracted = true;
-              }, { once: true });
-              HTMLMediaElement.prototype.play = function() {
-                if (!userInteracted) {
-                  return Promise.resolve();
-                }
-                return originalPlay.apply(this, arguments);
-              };
-            })();
-            true;
-          `}
+          mediaPlaybackRequiresUserAction={true}
           setSupportMultipleWindows={false}
           allowsBackForwardNavigationGestures
           userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
