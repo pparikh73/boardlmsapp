@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,8 @@ import {
   StatusBar,
   Image,
 } from 'react-native';
-import { useFocusEffect, router } from 'expo-router';
-// BoardLogo replaced by official PNG asset
-import LMSWebView from '../../components/LMSWebView';
+import { useFocusEffect, router, useNavigation } from 'expo-router';
+import LMSWebView, { LMSWebViewHandle } from '../../components/LMSWebView';
 import { getSession, logout, type Session } from '../../services/auth';
 import { BRAND, AUTH_URLS, TAB_URLS, SUPPORT_EMAIL } from '../../constants/skilljar';
 
@@ -31,6 +30,8 @@ const CARD_COLORS = {
 export default function AcademyTab() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [isFocused, setIsFocused] = useState(true);
+  const lmsRef = useRef<LMSWebViewHandle>(null);
+  const navigation = useNavigation();
 
   useFocusEffect(
     useCallback(() => {
@@ -39,6 +40,14 @@ export default function AcademyTab() {
       return () => setIsFocused(false);
     }, []),
   );
+
+  // Tapping the Academy tab while already on it returns to the home page
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('tabPress' as any, () => {
+      lmsRef.current?.goHome();
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   // Still loading
   if (session === undefined) return null;
@@ -53,7 +62,7 @@ export default function AcademyTab() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: '#1a2444' }}>
         <StatusBar barStyle="light-content" />
-        <LMSWebView url={TAB_URLS.home} onLogout={handleLogout} isFocused={isFocused} />
+        <LMSWebView ref={lmsRef} url={TAB_URLS.home} onLogout={handleLogout} isFocused={isFocused} showNavBar />
       </SafeAreaView>
     );
   }

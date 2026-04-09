@@ -1,155 +1,200 @@
-import { useRef, useState, useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
 import * as WebBrowser from 'expo-web-browser';
-import { BRAND, AUTH_URLS } from '../constants/skilljar';
+import { Ionicons } from '@expo/vector-icons';
+import { BRAND } from '../constants/skilljar';
 
 interface LMSWebViewProps {
   url: string;
   onLogout?: () => void;
   isFocused?: boolean;
+  showNavBar?: boolean;
 }
 
-export default function LMSWebView({ url, onLogout, isFocused = true }: LMSWebViewProps) {
-  const webViewRef = useRef<WebView>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  // Pause all videos when the tab loses focus to free GPU/decoder memory
-  useEffect(() => {
-    if (!isFocused) {
-      webViewRef.current?.injectJavaScript(
-        `document.querySelectorAll('video').forEach(function(v){try{v.pause();}catch(e){}});true;`
-      );
-    }
-  }, [isFocused]);
-
-  // Allow-list of URL prefixes that should stay inside the WebView.
-  // Anything outside this list opens in SFSafariViewController (in-app browser).
-  const IN_APP_PREFIXES = [
-    'https://academy.board.com',
-    'https://accounts.skilljar.com',
-    'https://community.board.com',
-    'https://www.board.com',
-    'https://board.com',
-  ];
-
-  function isInAppUrl(url: string): boolean {
-    return IN_APP_PREFIXES.some((prefix) => url.startsWith(prefix));
-  }
-
-  function handleNavigationChange(nav: WebViewNavigation) {
-    // Detect if Skilljar redirected to the logout endpoint
-    if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
-      onLogout?.();
-    }
-  }
-
-  function handleShouldStartLoadWithRequest(request: WebViewRequest): boolean {
-    const { url } = request;
-    // Let normal in-app URLs through
-    if (isInAppUrl(url)) return true;
-    // Non-http(s) links (tel:, mailto:, etc.) — let the OS handle them
-    if (!url.startsWith('http')) return false;
-    // Truly external URL → open in SFSafariViewController, stay in app
-    WebBrowser.openBrowserAsync(url, { dismissButtonStyle: 'close' });
-    return false;
-  }
-
-  function handleRefresh() {
-    setRefreshing(true);
-    webViewRef.current?.reload();
-  }
-
-  return (
-    <View style={styles.container}>
-      <WebView
-        ref={webViewRef}
-        source={{ uri: url }}
-        style={styles.webview}
-        onLoadStart={() => setLoading(true)}
-        onLoadEnd={() => {
-          setLoading(false);
-          setRefreshing(false);
-        }}
-        onNavigationStateChange={handleNavigationChange}
-        onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
-        sharedCookiesEnabled
-        thirdPartyCookiesEnabled
-        overScrollMode="never"
-        directionalLockEnabled
-        allowsInlineMediaPlayback
-        mediaPlaybackRequiresUserAction={true}
-        // KEY FIX: prevents window.open() / target="_blank" from launching Safari.
-        // WKWebView will navigate the current view instead of opening a new window.
-        setSupportMultipleWindows={false}
-        allowsBackForwardNavigationGestures
-        userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-        // Auto-recover if the WKWebView content process is terminated by iOS due to memory pressure
-        onContentProcessDidTerminate={() => webViewRef.current?.reload()}
-        injectedJavaScript={`
-          (function() {
-            var style = document.createElement('style');
-            style.innerHTML = [
-              '.sj-powered-by { display: none !important; }',
-              'html, body { max-width: 100% !important; overflow-x: hidden !important; }'
-            ].join('');
-            document.head.appendChild(style);
-
-            // Ensure iframes (Vimeo, Synthesia, etc.) receive the correct Referer header
-            // so domain-restricted embeds load correctly in WKWebView
-            var meta = document.querySelector('meta[name="referrer"]');
-            if (meta) {
-              meta.setAttribute('content', 'origin');
-            } else {
-              var refMeta = document.createElement('meta');
-              refMeta.name = 'referrer';
-              refMeta.content = 'origin';
-              document.head.appendChild(refMeta);
-            }
-
-            // Redirect window.open() calls to same-window navigation so they
-            // stay inside the WebView rather than launching Mobile Safari.
-            window.open = function(url, target, features) {
-              if (url) { window.location.href = url; }
-              return null;
-            };
-
-            // Only release video memory if the user actually played the video.
-            // Tracks play events so autoplay-ended or failed-load events don't
-            // clear thumbnails on videos the user never interacted with.
-            var userPlayedVideos = new WeakSet();
-            document.addEventListener('play', function(e) {
-              if (e.target && e.target.tagName === 'VIDEO') {
-                userPlayedVideos.add(e.target);
-              }
-            }, true);
-            document.addEventListener('ended', function(e) {
-              var v = e.target;
-              if (v && v.tagName === 'VIDEO' && userPlayedVideos.has(v)) {
-                var poster = v.poster;
-                v.src = '';
-                v.load();
-                if (poster) v.poster = poster;
-                userPlayedVideos.delete(v);
-              }
-            }, true);
-          })();
-          true;
-        `}
-      />
-      {loading && !refreshing && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color={BRAND.primary} />
-        </View>
-      )}
-    </View>
-  );
+export interface LMSWebViewHandle {
+  goHome: () => void;
 }
+
+const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
+  ({ url, onLogout, isFocused = true, showNavBar = false }, ref) => {
+    const webViewRef = useRef<WebView>(null);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+
+    useImperativeHandle(ref, () => ({
+      goHome: () => {
+        webViewRef.current?.injectJavaScript(`window.location.href = '${url}'; true;`);
+      },
+    }));
+
+    // Pause all videos when the tab loses focus to free GPU/decoder memory
+    useEffect(() => {
+      if (!isFocused) {
+        webViewRef.current?.injectJavaScript(
+          `document.querySelectorAll('video').forEach(function(v){try{v.pause();}catch(e){}});true;`
+        );
+      }
+    }, [isFocused]);
+
+    const IN_APP_PREFIXES = [
+      'https://academy.board.com',
+      'https://accounts.skilljar.com',
+      'https://community.board.com',
+      'https://www.board.com',
+      'https://board.com',
+    ];
+
+    function isInAppUrl(url: string): boolean {
+      return IN_APP_PREFIXES.some((prefix) => url.startsWith(prefix));
+    }
+
+    function handleNavigationChange(nav: WebViewNavigation) {
+      if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
+        onLogout?.();
+      }
+    }
+
+    function handleShouldStartLoadWithRequest(request: WebViewRequest): boolean {
+      const { url } = request;
+      if (isInAppUrl(url)) return true;
+      if (!url.startsWith('http')) return false;
+      WebBrowser.openBrowserAsync(url, { dismissButtonStyle: 'close' });
+      return false;
+    }
+
+    return (
+      <View style={styles.container}>
+        {showNavBar && (
+          <View style={styles.navBar}>
+            <TouchableOpacity
+              style={styles.navBtn}
+              onPress={() => webViewRef.current?.goBack()}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="chevron-back" size={22} color={BRAND.white} />
+              <Text style={styles.navBtnText}>Back</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.navBtn}
+              onPress={() => webViewRef.current?.injectJavaScript(`window.location.href = '${url}'; true;`)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="home-outline" size={20} color={BRAND.white} />
+            </TouchableOpacity>
+          </View>
+        )}
+        <WebView
+          ref={webViewRef}
+          source={{ uri: url }}
+          style={styles.webview}
+          onLoadStart={() => setLoading(true)}
+          onLoadEnd={() => {
+            setLoading(false);
+            setRefreshing(false);
+          }}
+          onNavigationStateChange={handleNavigationChange}
+          onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
+          sharedCookiesEnabled
+          thirdPartyCookiesEnabled
+          overScrollMode="never"
+          directionalLockEnabled
+          allowsInlineMediaPlayback
+          mediaPlaybackRequiresUserAction={true}
+          setSupportMultipleWindows={false}
+          allowsBackForwardNavigationGestures
+          userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+          onContentProcessDidTerminate={() => webViewRef.current?.reload()}
+          injectedJavaScript={`
+            (function() {
+              var style = document.createElement('style');
+              style.innerHTML = [
+                '.sj-powered-by { display: none !important; }',
+                'html, body { max-width: 100% !important; overflow-x: hidden !important; }'
+              ].join('');
+              document.head.appendChild(style);
+
+              // Ensure iframes (Vimeo, Synthesia, etc.) receive the correct Referer header
+              var meta = document.querySelector('meta[name="referrer"]');
+              if (meta) {
+                meta.setAttribute('content', 'origin');
+              } else {
+                var refMeta = document.createElement('meta');
+                refMeta.name = 'referrer';
+                refMeta.content = 'origin';
+                document.head.appendChild(refMeta);
+              }
+
+              // Force inline playback on all videos (prevents iOS full-screen takeover)
+              function addPlaysinline() {
+                document.querySelectorAll('video').forEach(function(v) {
+                  v.setAttribute('playsinline', '');
+                  v.setAttribute('webkit-playsinline', '');
+                });
+              }
+              addPlaysinline();
+              var plObserver = new MutationObserver(addPlaysinline);
+              plObserver.observe(document.body, { childList: true, subtree: true });
+
+              window.open = function(url, target, features) {
+                if (url) { window.location.href = url; }
+                return null;
+              };
+
+              // Only release video memory if the user actually played the video
+              var userPlayedVideos = new WeakSet();
+              document.addEventListener('play', function(e) {
+                if (e.target && e.target.tagName === 'VIDEO') {
+                  userPlayedVideos.add(e.target);
+                }
+              }, true);
+              document.addEventListener('ended', function(e) {
+                var v = e.target;
+                if (v && v.tagName === 'VIDEO' && userPlayedVideos.has(v)) {
+                  var poster = v.poster;
+                  v.src = '';
+                  v.load();
+                  if (poster) v.poster = poster;
+                  userPlayedVideos.delete(v);
+                }
+              }, true);
+            })();
+            true;
+          `}
+        />
+        {loading && !refreshing && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color={BRAND.primary} />
+          </View>
+        )}
+      </View>
+    );
+  }
+);
+
+export default LMSWebView;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  navBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#1a2444',
+  },
+  navBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  navBtnText: {
+    color: BRAND.white,
+    fontSize: 15,
+    fontWeight: '500',
   },
   webview: {
     flex: 1,
