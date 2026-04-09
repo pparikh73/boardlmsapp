@@ -1,7 +1,6 @@
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking } from 'react-native';
 import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
-import * as WebBrowser from 'expo-web-browser';
 import { Ionicons } from '@expo/vector-icons';
 import { BRAND } from '../constants/skilljar';
 
@@ -37,18 +36,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
       }
     }, [isFocused]);
 
-    const IN_APP_PREFIXES = [
-      'https://academy.board.com',
-      'https://accounts.skilljar.com',
-      'https://community.board.com',
-      'https://www.board.com',
-      'https://board.com',
-    ];
-
-    function isInAppUrl(url: string): boolean {
-      return IN_APP_PREFIXES.some((prefix) => url.startsWith(prefix));
-    }
-
     function handleNavigationChange(nav: WebViewNavigation) {
       if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
         onLogout?.();
@@ -57,10 +44,11 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
 
     function handleShouldStartLoadWithRequest(request: WebViewRequest): boolean {
       const { url } = request;
-      if (isInAppUrl(url)) return true;
-      if (!url.startsWith('http')) return false;
-      WebBrowser.openBrowserAsync(url, { dismissButtonStyle: 'close' });
-      return false;
+      if (!url.startsWith('http')) {
+        Linking.openURL(url).catch(() => {});
+        return false;
+      }
+      return true;
     }
 
     return (
