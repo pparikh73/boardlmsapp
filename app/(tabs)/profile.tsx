@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   View,
   Text,
@@ -6,33 +5,19 @@ import {
   SafeAreaView,
   ScrollView,
   TouchableOpacity,
-  Switch,
   Alert,
   Linking,
   StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { logout } from '../../services/auth';
 import { BRAND, SUPPORT_EMAIL } from '../../constants/skilljar';
 
-const LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'it', label: 'Italiano' },
-  { code: 'de', label: 'Deutsch' },
-  { code: 'fr', label: 'Français' },
-  { code: 'ja', label: '日本語' },
-] as const;
-
-type LangCode = (typeof LANGUAGES)[number]['code'];
+const APP_VERSION = Constants.expoConfig?.version ?? '1.0';
 
 export default function SettingsScreen() {
-  const [notifications, setNotifications] = useState(true);
-  const [selectedLang, setSelectedLang] = useState<LangCode>('en');
-  const [showLangPicker, setShowLangPicker] = useState(false);
-
-  const selectedLangLabel = LANGUAGES.find((l) => l.code === selectedLang)?.label ?? 'English';
-
   function handleSignOut() {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -50,12 +35,11 @@ export default function SettingsScreen() {
   function handleDeleteAccount() {
     Alert.alert(
       'Delete Account',
-      'Deleting your account is permanent and cannot be undone. All your data will be removed.\n\nAre you absolutely sure?',
+      'To delete your account, please contact our support team. This action is permanent and cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete Account',
-          style: 'destructive',
+          text: 'Contact Support',
           onPress: () =>
             Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Account%20Deletion%20Request`),
         },
@@ -67,7 +51,6 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
 
-      {/* Dark navy header — solid, no gradient */}
       <View style={styles.pageHeader}>
         <Text style={styles.pageTitle}>Settings</Text>
       </View>
@@ -77,94 +60,54 @@ export default function SettingsScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── PREFERENCES ─────────────────────────────── */}
-        <Text style={styles.sectionLabel}>PREFERENCES</Text>
-        <View style={styles.card}>
-          {/* Notifications row */}
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Notifications</Text>
-            <Switch
-              value={notifications}
-              onValueChange={setNotifications}
-              trackColor={{ false: '#d1d5db', true: '#34c759' }}
-              thumbColor="#ffffff"
-              ios_backgroundColor="#d1d5db"
-            />
-          </View>
-
-          <View style={styles.cardDivider} />
-
-          {/* Language picker */}
-          <View style={styles.langSection}>
-            <Text style={styles.rowLabel}>Language</Text>
-            <TouchableOpacity
-              style={styles.langDropdown}
-              activeOpacity={0.8}
-              onPress={() => setShowLangPicker(!showLangPicker)}
-            >
-              <Text style={styles.langDropdownText}>{selectedLangLabel}</Text>
-              <Ionicons
-                name={showLangPicker ? 'chevron-up' : 'chevron-down'}
-                size={16}
-                color={BRAND.mid1}
-              />
-            </TouchableOpacity>
-            {showLangPicker && (
-              <View style={styles.langOptions}>
-                {LANGUAGES.map((lang, i) => (
-                  <TouchableOpacity
-                    key={lang.code}
-                    style={[
-                      styles.langOption,
-                      i < LANGUAGES.length - 1 && styles.langOptionBorder,
-                    ]}
-                    onPress={() => {
-                      setSelectedLang(lang.code);
-                      setShowLangPicker(false);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.langOptionText,
-                        lang.code === selectedLang && styles.langOptionActive,
-                      ]}
-                    >
-                      {lang.label}
-                    </Text>
-                    {lang.code === selectedLang && (
-                      <Ionicons name="checkmark" size={16} color={BRAND.primary} />
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* ── ACCOUNT ──────────────────────────────────── */}
+        {/* ── ACCOUNT ────────────────────────────────── */}
         <Text style={styles.sectionLabel}>ACCOUNT</Text>
         <View style={styles.card}>
-          <TouchableOpacity style={styles.row} onPress={handleSignOut}>
+          <TouchableOpacity style={styles.row} onPress={handleSignOut} activeOpacity={0.7}>
             <Text style={styles.rowLabel}>Sign Out</Text>
             <Ionicons name="log-out-outline" size={20} color={BRAND.mid1} />
           </TouchableOpacity>
         </View>
 
-        {/* ── DANGER ZONE ─────────────────────────────── */}
-        <Text style={[styles.sectionLabel, styles.dangerLabel]}>DANGER ZONE</Text>
-        <View style={styles.dangerCard}>
-          <Text style={styles.dangerText}>
-            Deleting your account is permanent and cannot be undone. All your data will be removed.
-          </Text>
+        {/* ── LEGAL ──────────────────────────────────── */}
+        <Text style={styles.sectionLabel}>LEGAL</Text>
+        <View style={styles.card}>
           <TouchableOpacity
-            style={styles.deleteBtn}
-            activeOpacity={0.85}
-            onPress={handleDeleteAccount}
+            style={styles.row}
+            activeOpacity={0.7}
+            onPress={() => Linking.openURL('https://www.board.com/privacy-policy')}
           >
-            <Ionicons name="trash-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
-            <Text style={styles.deleteBtnText}>Delete Account</Text>
+            <Text style={styles.rowLabel}>Privacy Policy</Text>
+            <Ionicons name="open-outline" size={18} color={BRAND.mid1} />
           </TouchableOpacity>
+
+          <View style={styles.cardDivider} />
+
+          <TouchableOpacity
+            style={styles.row}
+            activeOpacity={0.7}
+            onPress={() => Linking.openURL('https://www.board.com/legal-notice')}
+          >
+            <Text style={styles.rowLabel}>Terms of Service</Text>
+            <Ionicons name="open-outline" size={18} color={BRAND.mid1} />
+          </TouchableOpacity>
+
+          <View style={styles.cardDivider} />
+
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>App Version</Text>
+            <Text style={styles.rowValue}>{APP_VERSION}</Text>
+          </View>
         </View>
+
+        {/* ── DELETE ACCOUNT ─────────────────────────── */}
+        <TouchableOpacity
+          style={styles.deleteRow}
+          activeOpacity={0.7}
+          onPress={handleDeleteAccount}
+        >
+          <Text style={styles.deleteText}>Delete Account</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -175,8 +118,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f0f2f5',
   },
-
-  // Dark solid header — matches reference exactly
   pageHeader: {
     backgroundColor: '#1a2444',
     paddingVertical: 16,
@@ -189,7 +130,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     letterSpacing: 0.2,
   },
-
   scroll: {
     flex: 1,
   },
@@ -198,8 +138,6 @@ const styles = StyleSheet.create({
     paddingTop: 24,
     paddingBottom: 48,
   },
-
-  // Section labels
   sectionLabel: {
     fontSize: 11,
     fontWeight: '700',
@@ -208,12 +146,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginLeft: 4,
   },
-  dangerLabel: {
-    color: '#c0392b',
-    marginTop: 12,
-  },
-
-  // White preference card
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 14,
@@ -234,88 +166,20 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: BRAND.dark1,
   },
+  rowValue: {
+    fontSize: 15,
+    color: BRAND.mid2,
+  },
   cardDivider: {
     height: 1,
     backgroundColor: '#f0f1f4',
-    marginHorizontal: 0,
   },
-
-  // Language dropdown
-  langSection: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 14,
-  },
-  langDropdown: {
-    flexDirection: 'row',
+  deleteRow: {
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    backgroundColor: '#fafbfc',
+    paddingVertical: 12,
   },
-  langDropdownText: {
-    fontSize: 16,
-    color: BRAND.dark1,
-  },
-  langOptions: {
-    marginTop: 6,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    overflow: 'hidden',
-    backgroundColor: '#ffffff',
-  },
-  langOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-  },
-  langOptionBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f1f4',
-  },
-  langOptionText: {
+  deleteText: {
     fontSize: 15,
-    color: BRAND.dark2,
-  },
-  langOptionActive: {
-    color: BRAND.primary,
-    fontWeight: '700',
-  },
-
-  // Danger zone card
-  dangerCard: {
-    backgroundColor: '#fff5f5',
-    borderWidth: 1,
-    borderColor: '#fcd4d4',
-    borderRadius: 14,
-    padding: 18,
-    marginBottom: 32,
-  },
-  dangerText: {
-    fontSize: 15,
-    color: BRAND.mid1,
-    lineHeight: 22,
-    marginBottom: 18,
-  },
-  deleteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#d94040',
-    borderRadius: 12,
-    paddingVertical: 14,
-  },
-  deleteBtnText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 16,
+    color: '#c0392b',
   },
 });
