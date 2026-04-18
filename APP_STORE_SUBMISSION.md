@@ -1,8 +1,8 @@
 # Board Academy — App Store Submission Requirements
 
 This document lists every field, asset, and document needed to publish the Board Academy
-app on the Apple App Store. Items marked ✅ are already done. Items marked ❓ need input
-from Board.
+app on the Apple App Store. Items marked ✅ are ready to go. Items marked ❓ still need
+Board's confirmation or input.
 
 ---
 
@@ -11,48 +11,101 @@ from Board.
 | Field | Value | Status |
 |---|---|---|
 | App Name | Board Academy | ❓ Confirm |
-| Subtitle (max 30 chars) | e.g. "Learning for Board Users" | ❓ Provide |
+| Subtitle (max 30 chars) | Learn. Certify. Grow. | ❓ Confirm |
 | Bundle ID | com.base69a73ce716a9ce7953fb465f.app | ✅ Done |
 | Primary Language | English (U.S.) | ✅ Done |
-| Primary Category | Education | ❓ Confirm |
-| Secondary Category | Business (optional) | ❓ Confirm |
-| SKU | Internal reference code (e.g. BOARD-ACADEMY-IOS) | ❓ Provide |
+| Primary Category | Education | ✅ Recommended |
+| Secondary Category | Business | ✅ Recommended |
+| SKU | BOARD-ACADEMY-IOS-001 | ❓ Confirm or replace with internal code |
 
 ---
 
 ## 2. App Store Listing Copy
 
 ### Description (max 4,000 characters)
-Full description of the app shown on the App Store page.
-Suggested structure:
-- What the app is (1–2 sentences)
-- Key features (bullet list)
-- Who it's for (customers, partners, employees)
 
-> ❓ **Board to provide**
+```
+Board Academy puts your entire learning experience in your pocket.
+
+Whether you're a Board customer, partner, or employee, Board Academy gives you instant 
+access to the courses, certifications, and community you need to onboard fast and 
+optimize faster.
+
+LEARN ON YOUR SCHEDULE
+Browse the full Board Academy course catalogue and pick up right where you left off — 
+on your commute, between meetings, or anywhere else. Interactive eLearning modules are 
+available anytime, on demand.
+
+WATCH VIDEO LESSONS INLINE
+Stream training videos directly inside the app without being pulled into a separate 
+player. Lessons load fast and play smoothly so you can stay focused on the content.
+
+EARN CERTIFICATIONS
+Track your progress through structured learning paths and work toward Board 
+certifications that demonstrate your expertise across finance, supply chain, retail, 
+and more.
+
+JOIN THE COMMUNITY
+Connect with fellow Board users in the Board Community tab. Ask questions, share tips, 
+and learn from practitioners around the world — all without leaving the app.
+
+BUILT FOR BOARD USERS
+Board Academy is designed exclusively for customers, partners, and employees of Board 
+International. Sign in with your existing Board account, your company's SSO, or as a 
+guest to get started.
+
+SECURE AND SEAMLESS LOGIN
+• Customer & Partner login via your Board account
+• Employee login via Boardway (company SSO)
+• Guest access for invited learners
+
+Board Academy is the official mobile learning companion for Board International — the 
+platform trusted by leading enterprises worldwide for integrated business planning.
+```
+
+> ❓ **Board marketing to review and approve before submission**
+
+---
 
 ### Promotional Text (max 170 characters)
-Appears above the description. Can be updated without a new app review.
-Example: *"Access Board training courses, certifications, and the Board community — all from your phone."*
+*This text appears above the description and can be updated at any time without a new app review.*
 
-> ❓ **Board to provide or approve**
+```
+Your Board training, certifications, and community — now in your pocket. Learn anywhere, anytime.
+```
+*(95 characters)*
 
-### Keywords (max 100 characters total, comma-separated)
-Used for App Store search ranking. Example:
-`Board, LMS, training, e-learning, academy, certification, courses, community`
+> ❓ **Board to confirm or replace**
 
-> ❓ **Board to provide**
+---
+
+### Keywords (max 100 characters, comma-separated)
+*Used for App Store search ranking. Do not repeat words already in the app name.*
+
+```
+training,LMS,e-learning,courses,certification,planning,community,CPM,IBP,eLearning
+```
+*(84 characters)*
+
+> ❓ **Board to confirm or add preferred terms**
+
+---
 
 ### Support URL
-A publicly accessible webpage where users can get help.
-Example: `https://www.board.com/support` or `https://academy.board.com/support`
+```
+https://www.board.com/en/support
+```
 
-> ❓ **Board to provide URL**
+> ❓ **Board to confirm this URL resolves to a support page, or provide the correct one**
+
+---
 
 ### Marketing URL (optional)
-A webpage about the app. Example: `https://www.board.com/academy`
+```
+https://www.board.com/en/board-academy
+```
 
-> ❓ **Board to provide URL (optional)**
+> ✅ This page exists and describes Board Academy
 
 ---
 
@@ -60,62 +113,75 @@ A webpage about the app. Example: `https://www.board.com/academy`
 
 Apple requires a publicly accessible privacy policy URL.
 
-**Board already has a privacy policy at:**
-👉 https://www.board.com/privacy-policy
+**Proposed URL:**
+```
+https://www.board.com/privacy-policy
+```
 
-The existing policy covers:
-- Personal data collected (name, email, job title, address)
-- Processing purposes (service delivery, marketing, legal compliance)
-- User rights (correction, erasure, portability)
+Board's existing policy covers:
+- Personal data collected: name, surname, email, job title, address
+- Processing purposes: service delivery, marketing, legal compliance
+- User rights: access, correction, erasure, data portability
 - Contact: privacy@board.com
-- Data controller: Board International SA, Via Maestri Comacini 4, Chiasso, Switzerland
+- Data controller: Board International SA, Via Maestri Comacini 4, Chiasso, Switzerland 6830
 
-**Action needed:** Confirm with Board's legal team whether:
-1. The existing URL can be used as-is for the app listing, OR
-2. A separate mobile app privacy policy is needed
-
-> ❓ **Board legal to confirm URL** — most likely `https://www.board.com/privacy-policy`
+> ❓ **Board legal to confirm this URL is acceptable for the App Store listing**
+> In most cases, an existing corporate privacy policy is sufficient.
 
 ---
 
 ## 4. App Privacy Labels ("Nutrition Labels")
 
-Apple requires you to declare what data the app collects. Based on the app's behaviour:
+Apple requires you to declare all data your app collects. The Board Academy app is a 
+WebView wrapper — it does not have its own analytics SDK, crash reporter, or ad network.
+All data collection happens on Board/Skilljar's servers, not in the app itself.
 
-| Data Type | Collected? | Linked to User? | Used for Tracking? |
-|---|---|---|---|
-| Name | Yes (via login) | Yes | No |
-| Email Address | Yes (via login) | Yes | No |
-| User ID | Yes (session token) | Yes | No |
-| Coarse Location | No | — | — |
-| Browsing History | No (WebView only, no logging) | — | — |
-| Crash Data | No (no crash SDK installed) | — | — |
+| Data Type | Collected? | Linked to User? | Used for Tracking? | Notes |
+|---|---|---|---|---|
+| Name | Yes | Yes | No | Provided at login via Skilljar/SSO |
+| Email Address | Yes | Yes | No | Used as login identifier |
+| User ID | Yes | Yes | No | Skilljar session token stored on device |
+| Browsing History | No | — | — | WebView content not logged by app |
+| Crash Data | No | — | — | No crash SDK installed |
+| Location | No | — | — | Not requested or collected |
+| Contacts | No | — | — | Not accessed |
+| Financial Info | No | — | — | No purchases in app |
+| Health & Fitness | No | — | — | Not collected |
+| Identifiers (IDFA) | No | — | — | No ad tracking |
 
-> ❓ **Board legal/privacy team to review and sign off on these declarations**
+**Suggested App Store privacy label selection:**
+- **Data Linked to You:** Email Address, User ID, Name
+- **Data Not Linked to You:** None
+- **Data Used to Track You:** None
+
+> ❓ **Board legal/privacy team to review and sign off before submission**
 
 ---
 
 ## 5. Age Rating
 
-Apple requires answering a questionnaire. Suggested answers for this app:
+Apple requires answering a short questionnaire. Answers for this app:
 
 | Question | Answer |
 |---|---|
 | Cartoon or fantasy violence | None |
 | Realistic violence | None |
-| Sexual content | None |
-| Nudity | None |
+| Sexual content or nudity | None |
 | Profanity or crude humour | None |
-| Alcohol, tobacco, drugs | None |
+| Alcohol, tobacco, or drug use | None |
 | Gambling | None |
-| Horror/fear themes | None |
-| Medical/treatment information | None |
-| Unrestricted web access | **Yes** (WebView app) |
+| Horror or fear themes | None |
+| Medical or treatment information | None |
+| Unrestricted web access | **Yes** |
 
-The "Unrestricted web access" answer will result in a **17+ age rating.**
-This is standard for any WebView-based app and will not block enterprise or education users.
+**Resulting rating: 17+**
 
-> ❓ **Board to confirm they accept 17+ rating**
+The 17+ rating is automatically applied to any app that uses a WebView (because Apple 
+cannot verify what web content may appear). This is standard practice and does not 
+affect discoverability or ability to download for enterprise/education users. LinkedIn, 
+Salesforce, and most enterprise apps carry the same rating.
+
+> ❓ **Board to confirm they accept the 17+ rating**
 
 ---
 
@@ -124,89 +190,102 @@ This is standard for any WebView-based app and will not block enterprise or educ
 | Requirement | Value | Status |
 |---|---|---|
 | Size | 1024 × 1024 px | ✅ Done (Icon-1024.png) |
-| Format | PNG, no alpha/transparency | ✅ Done |
-| No rounded corners | Apple applies them automatically | ✅ Done |
+| Format | PNG, no transparency | ✅ Done |
+| Rounded corners | Applied automatically by Apple | ✅ Done |
 
 ---
 
 ## 7. Screenshots
 
-**Only 2 sizes are strictly required.** All other sizes are auto-scaled by Apple.
+**Minimum requirement: 1 set for iPhone 6.9" OR 6.5".** All other sizes scale automatically.
 
-### Required: iPhone 6.9" (iPhone 16 Pro Max / 15 Pro Max)
-- Portrait: **1290 × 2796 px** (or 1260 × 2736 px)
-- Minimum 1, maximum 10 per size
-- Format: PNG or JPEG
+### Required: iPhone 6.9" (iPhone 16 Pro Max, 15 Pro Max)
+- Portrait: **1290 × 2796 px**
+- Format: PNG or JPEG, no alpha
+- Quantity: 1–10 images
 
-### Required: iPhone 6.5" (iPhone 14 Plus / 13 Pro Max)
+### Fallback: iPhone 6.5" (iPhone 14 Plus, 13 Pro Max)
 - Portrait: **1284 × 2778 px**
-- Only needed if 6.9" not provided
+- Only needed if you cannot provide 6.9"
 
-### Recommended to also provide:
-- iPad 13" Portrait: **2064 × 2752 px** (if you want iPad listed — optional)
+### Optional: iPad 13"
+- Portrait: **2064 × 2752 px**
+- Only needed if you want the app listed as iPad-compatible
 
-**Suggested screenshots to capture (on the actual device):**
+**Suggested screens to capture (in this order):**
 
-1. Academy home / course catalogue (logged in)
-2. A course detail page showing video lesson
-3. Community tab
-4. Login screen (showing the 3 sign-in options)
-5. Academy nav bar / in-lesson view
+1. **Login screen** — the 3 sign-in card options (Customer/Partner, Employee, Guest)
+2. **Academy home** — course catalogue after login
+3. **Course detail page** — showing the curriculum/lesson list
+4. **Lesson view** — in-lesson with video playing inline
+5. **Community tab** — the community homepage
 
-> ❓ **Board to take screenshots on iPhone 16 Pro Max or similar**
-> Screenshots must show real content — no placeholder screens
+> ❓ **Board or Piyush to take screenshots directly on device**
+> Enable "Show touches" in Developer settings for a polished look (optional)
 
 ---
 
-## 8. App Preview Video (Optional but Recommended)
+## 8. App Preview Video (Optional)
 
 - Duration: 15–30 seconds
-- Resolution: match screenshot size (1290 × 2796 for 6.9")
-- Format: .mov, .m4v, .mp4
-- Shows the app in use (screen recording from device)
+- Resolution: 1290 × 2796 (match 6.9" screenshot size)
+- Format: .mov, .m4v, or .mp4
+- Tip: Use iOS screen recording, then trim in iMovie
 
-> ❓ **Optional — Board to decide if they want to provide**
+Suggested flow: Login screen → Academy home → tap a course → lesson plays inline → 
+switch to Community tab.
+
+> ❓ **Optional — Board to decide**
 
 ---
 
 ## 9. Demo Account for Apple Reviewers
 
-Apple's reviewers must be able to log in and test the app. You need to provide:
+Apple reviewers cannot approve an app they cannot use. A working login must be provided.
 
 | Field | Value |
 |---|---|
-| Username / Email | A working test account email |
-| Password | Password for that account |
-| Notes | e.g. "Select Customer/Partner login, use these credentials" |
+| Login method | Customer / Partner Login |
+| Username / Email | ❓ Board to provide |
+| Password | ❓ Board to provide |
+| Review notes | "Tap 'Customer / Partner Login' and enter the credentials above. You will land on the Board Academy course catalogue." |
 
-> ❓ **Board to create a dedicated Apple Review test account**
-> Recommend: a real Skilljar account that won't expire and has access to at least one course
+**Requirements for this account:**
+- Must be a real, working Skilljar account
+- Must have access to at least one published course
+- Must not expire during the review period (set no expiry)
+- Recommend creating a dedicated account: e.g. `apple-review@board.com`
+
+> ❓ **Board to create and provide credentials**
 
 ---
 
 ## 10. What Happens After Submission
 
-1. Board provides all items above → you enter them in App Store Connect
-2. Select build 36 (current TestFlight build) as the submission build
-3. Submit for review → Apple reviews in **1–3 business days**
-4. If approved → app goes live on the App Store
-5. If rejected → Apple provides specific reasons; usually fixable quickly
+1. Board confirms/approves all items above
+2. Piyush enters everything into App Store Connect and selects build 36
+3. Submit for review — Apple reviews in **1–3 business days** (first submission)
+4. If approved → app goes live on the App Store immediately or on a chosen release date
+5. If rejected → Apple gives specific reasons; most first-submission rejections are minor and fixable same day
 
 ---
 
 ## Summary Checklist
 
-| Item | Owner | Status |
-|---|---|---|
-| App Name + Subtitle | Board | ❓ |
-| Description (4,000 chars) | Board | ❓ |
-| Promotional Text | Board | ❓ |
-| Keywords | Board | ❓ |
-| Support URL | Board | ❓ |
-| Privacy Policy URL | Board Legal | ❓ (likely board.com/privacy-policy) |
-| Privacy Labels sign-off | Board Legal | ❓ |
-| Age Rating (17+ OK?) | Board | ❓ |
-| App Icon 1024×1024 | Done | ✅ |
-| Screenshots (6.9" iPhone) | Board | ❓ |
-| Demo Account credentials | Board | ❓ |
-| App Preview Video | Board (optional) | ❓ |
+| Item | Proposed Value | Owner | Status |
+|---|---|---|---|
+| App Name | Board Academy | Board | ❓ Confirm |
+| Subtitle | Learn. Certify. Grow. | Board | ❓ Confirm |
+| Description | See Section 2 above | Board | ❓ Approve |
+| Promotional Text | See Section 2 above | Board | ❓ Approve |
+| Keywords | See Section 2 above | Board | ❓ Approve |
+| Support URL | board.com/en/support | Board | ❓ Confirm |
+| Marketing URL | board.com/en/board-academy | — | ✅ Ready |
+| Privacy Policy URL | board.com/privacy-policy | Board Legal | ❓ Confirm |
+| Privacy Labels | Name, Email, User ID linked to user | Board Legal | ❓ Sign off |
+| Age Rating | 17+ (standard for WebView apps) | Board | ❓ Confirm |
+| App Icon 1024×1024 | Icon-1024.png | — | ✅ Done |
+| Screenshots (6.9" iPhone) | 5 suggested screens — see Section 7 | Board / Piyush | ❓ Capture |
+| Demo Account | apple-review@board.com (suggested) | Board | ❓ Create |
+| App Preview Video | Optional | Board | ❓ Optional |
+| Build to submit | Build 36 (current TestFlight build) | — | ✅ Ready |
