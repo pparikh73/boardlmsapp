@@ -60,6 +60,13 @@ export default function SettingsScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        {/* ── APP IDENTITY ───────────────────────────── */}
+        <View style={styles.appIdentity}>
+          <Text style={styles.appName}>Board Connect</Text>
+          <Text style={styles.appTagline}>Learn. Connect. Grow.</Text>
+          <Text style={styles.appVersion}>Version {APP_VERSION}</Text>
+        </View>
+
         {/* ── ACCOUNT ────────────────────────────────── */}
         <Text style={styles.sectionLabel}>ACCOUNT</Text>
         <View style={styles.card}>
@@ -92,12 +99,6 @@ export default function SettingsScreen() {
             <Ionicons name="open-outline" size={18} color={BRAND.mid1} />
           </TouchableOpacity>
 
-          <View style={styles.cardDivider} />
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>App Version</Text>
-            <Text style={styles.rowValue}>{APP_VERSION}</Text>
-          </View>
         </View>
 
         {/* ── DELETE ACCOUNT ─────────────────────────── */}
@@ -181,5 +182,27 @@ const styles = StyleSheet.create({
   deleteText: {
     fontSize: 15,
     color: '#c0392b',
+  },
+  appIdentity: {
+    alignItems: 'center',
+    paddingVertical: 28,
+    marginBottom: 8,
+  },
+  appName: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: BRAND.dark1,
+    letterSpacing: -0.3,
+  },
+  appTagline: {
+    fontSize: 13,
+    color: BRAND.mid2,
+    marginTop: 4,
+    letterSpacing: 0.2,
+  },
+  appVersion: {
+    fontSize: 12,
+    color: BRAND.mid2,
+    marginTop: 8,
   },
 });
