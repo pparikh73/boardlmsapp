@@ -33,7 +33,7 @@ export default function LoginScreen() {
           <BoardLogo width={130} />
           <View style={styles.dividerLine} />
           <View style={styles.headerText}>
-            <Text style={styles.title}>Board Academy</Text>
+            <Text style={styles.title}>Board Connect</Text>
             <Text style={styles.subtitle}>Choose how you'd like to sign in</Text>
           </View>
         </View>

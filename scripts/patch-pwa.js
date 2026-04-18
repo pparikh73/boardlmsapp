@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const PWA_TAGS = `<link rel="manifest" href="/manifest.json" /><meta name="apple-mobile-web-app-capable" content="yes" /><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" /><meta name="apple-mobile-web-app-title" content="Board Academy" /><meta name="theme-color" content="#1694d1" />`;
+const PWA_TAGS = `<link rel="manifest" href="/manifest.json" /><meta name="apple-mobile-web-app-capable" content="yes" /><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" /><meta name="apple-mobile-web-app-title" content="Board Connect" /><meta name="theme-color" content="#1694d1" />`;
 
 function patchHtml(filePath) {
   let html = fs.readFileSync(filePath, 'utf8');

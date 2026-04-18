@@ -1,7 +1,7 @@
 {
-  "name": "Board Academy",
-  "short_name": "Board Academy",
-  "description": "Board International's online learning platform",
+  "name": "Board Connect",
+  "short_name": "Board Connect",
+  "description": "Learn, connect, and grow with Board International.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1694d1",

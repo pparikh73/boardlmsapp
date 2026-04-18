@@ -1,6 +1,6 @@
-# Board Academy — App Store Submission Requirements
+# Board Connect — App Store Submission Requirements
 
-This document lists every field, asset, and document needed to publish the Board Academy
+This document lists every field, asset, and document needed to publish the Board Connect
 app on the Apple App Store. Items marked ✅ are ready to go. Items marked ❓ still need
 Board's confirmation or input.
 
@@ -10,13 +10,13 @@ Board's confirmation or input.
 
 | Field | Value | Status |
 |---|---|---|
-| App Name | Board Academy | ❓ Confirm |
-| Subtitle (max 30 chars) | Learn. Certify. Grow. | ❓ Confirm |
+| App Name | Board Connect | ✅ Ready |
+| Subtitle (max 30 chars) | Learn. Connect. Grow. | ✅ Ready (22 chars) |
 | Bundle ID | com.base69a73ce716a9ce7953fb465f.app | ✅ Done |
 | Primary Language | English (U.S.) | ✅ Done |
 | Primary Category | Education | ✅ Recommended |
 | Secondary Category | Business | ✅ Recommended |
-| SKU | BOARD-ACADEMY-IOS-001 | ❓ Confirm or replace with internal code |
+| SKU | BOARD-CONNECT-IOS-001 | ❓ Confirm or replace with internal code |
 
 ---
 
@@ -25,33 +25,32 @@ Board's confirmation or input.
 ### Description (max 4,000 characters)
 
 ```
-Board Academy puts your entire learning experience in your pocket.
+Board Connect — Learn. Connect. Grow.
 
-Whether you're a Board customer, partner, or employee, Board Academy gives you instant 
-access to the courses, certifications, and community you need to onboard fast and 
-optimize faster.
+Board Connect is the official mobile app for Board International, bringing together
+everything you need to get the most out of Board — learning, community, and growth —
+all in one place.
 
-LEARN ON YOUR SCHEDULE
-Browse the full Board Academy course catalogue and pick up right where you left off — 
-on your commute, between meetings, or anywhere else. Interactive eLearning modules are 
-available anytime, on demand.
+LEARN
+Access the full Board Academy course catalogue on the go. Whether you're onboarding
+fast or deepening your expertise, interactive eLearning modules are available anytime,
+on demand. Stream training videos inline, track your progress through structured
+learning paths, and work toward Board certifications across finance, supply chain,
+retail, and more.
 
-WATCH VIDEO LESSONS INLINE
-Stream training videos directly inside the app without being pulled into a separate 
-player. Lessons load fast and play smoothly so you can stay focused on the content.
+CONNECT
+Jump into the Board Community without leaving the app. Ask questions, share tips, and
+learn from practitioners and experts around the world. The community tab gives you
+instant access to discussions, answers, and peer knowledge.
 
-EARN CERTIFICATIONS
-Track your progress through structured learning paths and work toward Board 
-certifications that demonstrate your expertise across finance, supply chain, retail, 
-and more.
-
-JOIN THE COMMUNITY
-Connect with fellow Board users in the Board Community tab. Ask questions, share tips, 
-and learn from practitioners around the world — all without leaving the app.
+GROW
+Combine learning and community to build real-world Board expertise. Structured courses,
+scenario-based business cases, and a global peer network help you get more value from
+your Board investment — faster.
 
 BUILT FOR BOARD USERS
-Board Academy is designed exclusively for customers, partners, and employees of Board 
-International. Sign in with your existing Board account, your company's SSO, or as a 
+Board Connect is designed exclusively for customers, partners, and employees of Board
+International. Sign in with your existing Board account, your company's SSO, or as a
 guest to get started.
 
 SECURE AND SEAMLESS LOGIN
@@ -59,8 +58,8 @@ SECURE AND SEAMLESS LOGIN
 • Employee login via Boardway (company SSO)
 • Guest access for invited learners
 
-Board Academy is the official mobile learning companion for Board International — the 
-platform trusted by leading enterprises worldwide for integrated business planning.
+Board Connect is powered by Board International — the platform trusted by leading
+enterprises worldwide for integrated business planning.
 ```
 
 > ❓ **Board marketing to review and approve before submission**
@@ -68,24 +67,24 @@ platform trusted by leading enterprises worldwide for integrated business planni
 ---
 
 ### Promotional Text (max 170 characters)
-*This text appears above the description and can be updated at any time without a new app review.*
+*Can be updated at any time without a new app review.*
 
 ```
-Your Board training, certifications, and community — now in your pocket. Learn anywhere, anytime.
+Your Board training, community, and growth — all in one app. Learn. Connect. Grow.
 ```
-*(95 characters)*
+*(83 characters)*
 
 > ❓ **Board to confirm or replace**
 
 ---
 
 ### Keywords (max 100 characters, comma-separated)
-*Used for App Store search ranking. Do not repeat words already in the app name.*
+*Do not repeat words already in the app name.*
 
 ```
-training,LMS,e-learning,courses,certification,planning,community,CPM,IBP,eLearning
+training,LMS,e-learning,courses,certification,community,planning,CPM,IBP,academy
 ```
-*(84 characters)*
+*(81 characters)*
 
 > ❓ **Board to confirm or add preferred terms**
 
@@ -105,13 +104,14 @@ https://www.board.com/en/support
 https://www.board.com/en/board-academy
 ```
 
-> ✅ This page exists and describes Board Academy
+> ✅ This page exists and describes Board Academy / Board Connect
 
 ---
 
 ## 3. Privacy Policy
 
-Apple requires a publicly accessible privacy policy URL.
+Apple requires a publicly accessible privacy policy URL — both in the App Store listing
+and accessible from within the app (already linked in the Settings tab).
 
 **Proposed URL:**
 ```
@@ -126,15 +126,13 @@ Board's existing policy covers:
 - Data controller: Board International SA, Via Maestri Comacini 4, Chiasso, Switzerland 6830
 
 > ❓ **Board legal to confirm this URL is acceptable for the App Store listing**
-> In most cases, an existing corporate privacy policy is sufficient.
 
 ---
 
 ## 4. App Privacy Labels ("Nutrition Labels")
 
-Apple requires you to declare all data your app collects. The Board Academy app is a 
-WebView wrapper — it does not have its own analytics SDK, crash reporter, or ad network.
-All data collection happens on Board/Skilljar's servers, not in the app itself.
+Board Connect is a WebView wrapper — it does not have its own analytics SDK, crash
+reporter, or ad network. All data collection happens on Board/Skilljar's servers.
 
 | Data Type | Collected? | Linked to User? | Used for Tracking? | Notes |
 |---|---|---|---|---|
@@ -146,12 +144,10 @@ All data collection happens on Board/Skilljar's servers, not in the app itself.
 | Location | No | — | — | Not requested or collected |
 | Contacts | No | — | — | Not accessed |
 | Financial Info | No | — | — | No purchases in app |
-| Health & Fitness | No | — | — | Not collected |
 | Identifiers (IDFA) | No | — | — | No ad tracking |
 
 **Suggested App Store privacy label selection:**
 - **Data Linked to You:** Email Address, User ID, Name
-- **Data Not Linked to You:** None
 - **Data Used to Track You:** None
 
 > ❓ **Board legal/privacy team to review and sign off before submission**
@@ -159,8 +155,6 @@ All data collection happens on Board/Skilljar's servers, not in the app itself.
 ---
 
 ## 5. Age Rating
-
-Apple requires answering a short questionnaire. Answers for this app:
 
 | Question | Answer |
 |---|---|
@@ -176,10 +170,9 @@ Apple requires answering a short questionnaire. Answers for this app:
 
 **Resulting rating: 17+**
 
-The 17+ rating is automatically applied to any app that uses a WebView (because Apple 
-cannot verify what web content may appear). This is standard practice and does not 
-affect discoverability or ability to download for enterprise/education users. LinkedIn, 
-Salesforce, and most enterprise apps carry the same rating.
+The 17+ rating is automatically applied to any app that uses a WebView. This is standard
+practice and does not affect discoverability or ability to download for enterprise or
+education users. LinkedIn, Salesforce, and most enterprise apps carry the same rating.
 
 > ❓ **Board to confirm they accept the 17+ rating**
 
@@ -221,7 +214,6 @@ Salesforce, and most enterprise apps carry the same rating.
 5. **Community tab** — the community homepage
 
 > ❓ **Board or Piyush to take screenshots directly on device**
-> Enable "Show touches" in Developer settings for a polished look (optional)
 
 ---
 
@@ -230,10 +222,7 @@ Salesforce, and most enterprise apps carry the same rating.
 - Duration: 15–30 seconds
 - Resolution: 1290 × 2796 (match 6.9" screenshot size)
 - Format: .mov, .m4v, or .mp4
-- Tip: Use iOS screen recording, then trim in iMovie
-
-Suggested flow: Login screen → Academy home → tap a course → lesson plays inline → 
-switch to Community tab.
+- Suggested flow: Login → Academy course catalogue → open a lesson → video plays inline → switch to Community tab
 
 > ❓ **Optional — Board to decide**
 
@@ -241,7 +230,7 @@ switch to Community tab.
 
 ## 9. Demo Account for Apple Reviewers
 
-Apple reviewers cannot approve an app they cannot use. A working login must be provided.
+Apple reviewers must be able to log in and test the app.
 
 | Field | Value |
 |---|---|
@@ -251,9 +240,8 @@ Apple reviewers cannot approve an app they cannot use. A working login must be p
 | Review notes | "Tap 'Customer / Partner Login' and enter the credentials above. You will land on the Board Academy course catalogue." |
 
 **Requirements for this account:**
-- Must be a real, working Skilljar account
-- Must have access to at least one published course
-- Must not expire during the review period (set no expiry)
+- Must be a real, working Skilljar account with access to at least one published course
+- Must not expire during the review period
 - Recommend creating a dedicated account: e.g. `apple-review@board.com`
 
 > ❓ **Board to create and provide credentials**
@@ -263,9 +251,9 @@ Apple reviewers cannot approve an app they cannot use. A working login must be p
 ## 10. What Happens After Submission
 
 1. Board confirms/approves all items above
-2. Piyush enters everything into App Store Connect and selects build 36
+2. Piyush enters everything into App Store Connect and selects the current build
 3. Submit for review — Apple reviews in **1–3 business days** (first submission)
-4. If approved → app goes live on the App Store immediately or on a chosen release date
+4. If approved → app goes live on the App Store
 5. If rejected → Apple gives specific reasons; most first-submission rejections are minor and fixable same day
 
 ---
@@ -274,8 +262,8 @@ Apple reviewers cannot approve an app they cannot use. A working login must be p
 
 | Item | Proposed Value | Owner | Status |
 |---|---|---|---|
-| App Name | Board Academy | Board | ❓ Confirm |
-| Subtitle | Learn. Certify. Grow. | Board | ❓ Confirm |
+| App Name | Board Connect | — | ✅ Ready |
+| Subtitle | Learn. Connect. Grow. | — | ✅ Ready |
 | Description | See Section 2 above | Board | ❓ Approve |
 | Promotional Text | See Section 2 above | Board | ❓ Approve |
 | Keywords | See Section 2 above | Board | ❓ Approve |
@@ -288,4 +276,4 @@ Apple reviewers cannot approve an app they cannot use. A working login must be p
 | Screenshots (6.9" iPhone) | 5 suggested screens — see Section 7 | Board / Piyush | ❓ Capture |
 | Demo Account | apple-review@board.com (suggested) | Board | ❓ Create |
 | App Preview Video | Optional | Board | ❓ Optional |
-| Build to submit | Build 36 (current TestFlight build) | — | ✅ Ready |
+| Build to submit | Current TestFlight build | — | ✅ Ready |

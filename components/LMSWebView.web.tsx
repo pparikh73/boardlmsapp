@@ -21,7 +21,7 @@ export default function LMSWebView({ url }: LMSWebViewProps) {
         allow="autoplay; fullscreen"
         referrerPolicy="no-referrer-when-downgrade"
         sandbox="allow-forms allow-modals allow-popups allow-same-origin allow-scripts"
-        title="Board Academy"
+        title="Board Connect"
       />
     </View>
   );

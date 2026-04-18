@@ -69,7 +69,7 @@ export default function GuestLoginScreen() {
           <View style={styles.header}>
             <Text style={[styles.title, isDark && styles.titleDark]}>Guest Sign In</Text>
             <Text style={[styles.subtitle, isDark && styles.subtitleDark]}>
-              Sign in with your Board Academy guest account
+              Sign in with your Board Connect guest account
             </Text>
           </View>
 
