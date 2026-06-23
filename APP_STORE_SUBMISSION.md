@@ -2,7 +2,7 @@
 
 This document lists every field, asset, and document needed to publish the Board Connect
 app on the Apple App Store. Items marked ✅ are ready to go. Items marked ❓ still need
-Board's confirmation or input.
+confirmation or input.
 
 ---
 
@@ -14,79 +14,76 @@ Board's confirmation or input.
 | Subtitle (max 30 chars) | Learn. Connect. Grow. | ✅ Ready (22 chars) |
 | Bundle ID | com.base69a73ce716a9ce7953fb465f.app | ✅ Done |
 | Primary Language | English (U.S.) | ✅ Done |
-| Primary Category | Education | ✅ Recommended |
-| Secondary Category | Business | ✅ Recommended |
-| SKU | BOARD-CONNECT-IOS-001 | ❓ Confirm or replace with internal code |
+| Primary Category | Education | ✅ Ready |
+| Secondary Category | Business | ✅ Ready |
+| SKU | BOARD-CONNECT-IOS-001 | ✅ Use this unless Board provides an internal code |
 
 ---
 
 ## 2. App Store Listing Copy
 
-### Description (max 4,000 characters)
+### Description ✅ APPROVED BY BOARD MARKETING
 
 ```
 Board Connect — Learn. Connect. Grow.
 
-Board Connect is the official mobile app for Board International, bringing together
-everything you need to get the most out of Board — learning, community, and growth —
-all in one place.
+Board Connect is the official learning and community app for Board. Designed for
+customers, partners, employees, and invited learners, it brings together learning,
+collaboration, and expertise development in one connected experience. Whether you're
+onboarding to Board, building advanced planning skills, preparing for certification,
+or engaging with peers, Board Connect helps you learn continuously and stay connected
+to the global Board ecosystem.
 
 LEARN
-Access the full Board Academy course catalogue on the go. Whether you're onboarding
-fast or deepening your expertise, interactive eLearning modules are available anytime,
-on demand. Stream training videos inline, track your progress through structured
-learning paths, and work toward Board certifications across finance, supply chain,
-retail, and more.
+Access Board Academy anytime, anywhere. Discover curated learning paths, interactive
+courses, certification programs, and practical resources designed to help you build
+expertise in enterprise planning and decision-making.
+• Explore on-demand learning experiences
+• Follow structured learning paths and certifications
+• Watch training videos and interactive lessons
+• Track your progress across courses and programs
+• Develop practical skills through real-world scenarios
 
 CONNECT
-Jump into the Board Community without leaving the app. Ask questions, share tips, and
-learn from practitioners and experts around the world. The community tab gives you
-instant access to discussions, answers, and peer knowledge.
+Join a global network of Board users, experts, and practitioners. Exchange ideas, ask
+questions, share experiences, and learn from peers solving real business challenges.
+• Participate in community discussions
+• Connect with experts and fellow practitioners
+• Discover best practices and new approaches
+• Learn from customer success stories and shared experiences
 
 GROW
-Combine learning and community to build real-world Board expertise. Structured courses,
-scenario-based business cases, and a global peer network help you get more value from
-your Board investment — faster.
+Learning doesn't stop when a course ends. Board Connect combines education and community
+to support continuous growth, helping you expand your knowledge, strengthen your skills,
+and maximize the value of your Board investment.
 
-BUILT FOR BOARD USERS
-Board Connect is designed exclusively for customers, partners, and employees of Board
-International. Sign in with your existing Board account, your company's SSO, or as a
-guest to get started.
+SECURE ACCESS
+Sign in with your Board account, your organization's single sign-on (SSO), or an
+approved guest account.
 
-SECURE AND SEAMLESS LOGIN
-• Customer & Partner login via your Board account
-• Employee login via Boardway (company SSO)
-• Guest access for invited learners
-
-Board Connect is powered by Board International — the platform trusted by leading
-enterprises worldwide for integrated business planning.
+Powered by AI and internal and external signals, Board helps organizations make
+confident, aligned decisions in a constantly changing world. Board Connect extends that
+experience by providing mobile access to the knowledge, skills, and community that
+drive planning excellence.
 ```
-
-> ❓ **Board marketing to review and approve before submission**
 
 ---
 
-### Promotional Text (max 170 characters)
-*Can be updated at any time without a new app review.*
+### Promotional Text ✅ APPROVED BY BOARD MARKETING
 
 ```
-Your Board training, community, and growth — all in one app. Learn. Connect. Grow.
+Build expertise with OnDemand learning, certifications, and a global community of Board
+professionals—all in one connected experience.
 ```
-*(83 characters)*
-
-> ❓ **Board to confirm or replace**
 
 ---
 
-### Keywords (max 100 characters, comma-separated)
-*Do not repeat words already in the app name.*
+### Keywords ✅ APPROVED BY BOARD MARKETING
 
 ```
-training,LMS,e-learning,courses,certification,community,planning,CPM,IBP,academy
+learning,certification,community,enablement,planning,analytics,finance,supplychain,IBP,CPM
 ```
-*(81 characters)*
-
-> ❓ **Board to confirm or add preferred terms**
+*(90 characters)*
 
 ---
 
@@ -99,40 +96,31 @@ https://www.board.com/en/support
 
 ---
 
-### Marketing URL (optional)
+### Marketing URL
 ```
 https://www.board.com/en/board-academy
 ```
-
-> ✅ This page exists and describes Board Academy / Board Connect
+✅ Page confirmed live
 
 ---
 
 ## 3. Privacy Policy
-
-Apple requires a publicly accessible privacy policy URL — both in the App Store listing
-and accessible from within the app (already linked in the Settings tab).
 
 **Proposed URL:**
 ```
 https://www.board.com/privacy-policy
 ```
 
-Board's existing policy covers:
-- Personal data collected: name, surname, email, job title, address
-- Processing purposes: service delivery, marketing, legal compliance
-- User rights: access, correction, erasure, data portability
-- Contact: privacy@board.com
-- Data controller: Board International SA, Via Maestri Comacini 4, Chiasso, Switzerland 6830
+Already linked in the app's Settings tab (satisfies Apple's in-app requirement).
 
 > ❓ **Board legal to confirm this URL is acceptable for the App Store listing**
 
 ---
 
-## 4. App Privacy Labels ("Nutrition Labels")
+## 4. App Privacy Labels
 
-Board Connect is a WebView wrapper — it does not have its own analytics SDK, crash
-reporter, or ad network. All data collection happens on Board/Skilljar's servers.
+Board Connect is a WebView wrapper — no analytics SDK, crash reporter, or ad network.
+All data collection happens on Board/Skilljar's servers.
 
 | Data Type | Collected? | Linked to User? | Used for Tracking? | Notes |
 |---|---|---|---|---|
@@ -146,15 +134,34 @@ reporter, or ad network. All data collection happens on Board/Skilljar's servers
 | Financial Info | No | — | — | No purchases in app |
 | Identifiers (IDFA) | No | — | — | No ad tracking |
 
-**Suggested App Store privacy label selection:**
-- **Data Linked to You:** Email Address, User ID, Name
-- **Data Used to Track You:** None
+**App Store selection:**
+- Data Linked to You: Email Address, User ID, Name
+- Data Used to Track You: None
 
-> ❓ **Board legal/privacy team to review and sign off before submission**
+> ❓ **Board legal to sign off before submission**
 
 ---
 
 ## 5. Age Rating
+
+⚠️ **Board has requested 4+ or 12+ instead of 17+.**
+
+The 17+ rating is triggered by answering "Yes" to Apple's "Unrestricted web access"
+question. To achieve 4+, the app's WebView must be restricted to known Board/Skilljar
+domains so we can truthfully answer "No."
+
+**Proposed fix:** Restrict navigation to any URL matching:
+- `*.board.com`
+- `*.skilljar.com`
+- `*.skilljar.app`
+- `*.vanillacommunities.com`
+
+External links would open in Safari instead of in-app. This is cleaner UX anyway and
+avoids enumerating specific subdomains like before.
+
+> ❓ **Piyush to implement domain restriction before submission to target 4+ rating**
+
+**Age rating questionnaire answers (once restriction is in place):**
 
 | Question | Answer |
 |---|---|
@@ -166,15 +173,9 @@ reporter, or ad network. All data collection happens on Board/Skilljar's servers
 | Gambling | None |
 | Horror or fear themes | None |
 | Medical or treatment information | None |
-| Unrestricted web access | **Yes** |
+| Unrestricted web access | **No** (after domain restriction applied) |
 
-**Resulting rating: 17+**
-
-The 17+ rating is automatically applied to any app that uses a WebView. This is standard
-practice and does not affect discoverability or ability to download for enterprise or
-education users. LinkedIn, Salesforce, and most enterprise apps carry the same rating.
-
-> ❓ **Board to confirm they accept the 17+ rating**
+**Target rating: 4+**
 
 ---
 
@@ -182,98 +183,71 @@ education users. LinkedIn, Salesforce, and most enterprise apps carry the same r
 
 | Requirement | Value | Status |
 |---|---|---|
-| Size | 1024 × 1024 px | ✅ Done (Icon-1024.png) |
+| Size | 1024 × 1024 px | ✅ Done (equal padding applied) |
 | Format | PNG, no transparency | ✅ Done |
 | Rounded corners | Applied automatically by Apple | ✅ Done |
+
+> ❓ **Board graphics team is working on a new icon — replace assets/icon.png and assets/Icon-1024.png when received**
 
 ---
 
 ## 7. Screenshots
 
-**Minimum requirement: 1 set for iPhone 6.9" OR 6.5".** All other sizes scale automatically.
-
 ### Required: iPhone 6.9" (iPhone 16 Pro Max, 15 Pro Max)
-- Portrait: **1290 × 2796 px**
-- Format: PNG or JPEG, no alpha
-- Quantity: 1–10 images
+- Portrait: **1290 × 2796 px**, PNG or JPEG, 1–10 images
 
-### Fallback: iPhone 6.5" (iPhone 14 Plus, 13 Pro Max)
-- Portrait: **1284 × 2778 px**
-- Only needed if you cannot provide 6.9"
+### Fallback: iPhone 6.5"
+- Portrait: **1284 × 2778 px** (only if 6.9" unavailable)
 
-### Optional: iPad 13"
-- Portrait: **2064 × 2752 px**
-- Only needed if you want the app listed as iPad-compatible
+**Suggested screens (in order):**
+1. Login screen — 3 sign-in options
+2. Academy home — course catalogue after login
+3. Course detail page — curriculum/lesson list
+4. Lesson view — video playing inline
+5. Community tab — community homepage
 
-**Suggested screens to capture (in this order):**
-
-1. **Login screen** — the 3 sign-in card options (Customer/Partner, Employee, Guest)
-2. **Academy home** — course catalogue after login
-3. **Course detail page** — showing the curriculum/lesson list
-4. **Lesson view** — in-lesson with video playing inline
-5. **Community tab** — the community homepage
-
-> ❓ **Board or Piyush to take screenshots directly on device**
+> ❓ **Piyush to take screenshots on device**
 
 ---
 
 ## 8. App Preview Video (Optional)
 
-- Duration: 15–30 seconds
-- Resolution: 1290 × 2796 (match 6.9" screenshot size)
-- Format: .mov, .m4v, or .mp4
-- Suggested flow: Login → Academy course catalogue → open a lesson → video plays inline → switch to Community tab
+- 15–30 seconds, 1290 × 2796, .mov/.m4v/.mp4
+- Flow: Login → Academy → open lesson → video inline → Community tab
 
-> ❓ **Optional — Board to decide**
+> ❓ Optional
 
 ---
 
 ## 9. Demo Account for Apple Reviewers
 
-Apple reviewers must be able to log in and test the app.
-
 | Field | Value |
 |---|---|
 | Login method | Customer / Partner Login |
-| Username / Email | ❓ Board to provide |
-| Password | ❓ Board to provide |
+| Username / Email | ❓ Piyush to provide |
+| Password | ❓ Piyush to provide |
 | Review notes | "Tap 'Customer / Partner Login' and enter the credentials above. You will land on the Board Academy course catalogue." |
 
-**Requirements for this account:**
-- Must be a real, working Skilljar account with access to at least one published course
-- Must not expire during the review period
-- Recommend creating a dedicated account: e.g. `apple-review@board.com`
-
-> ❓ **Board to create and provide credentials**
+> ❓ **Piyush to obtain and provide credentials**
 
 ---
 
-## 10. What Happens After Submission
+## 10. Summary Checklist
 
-1. Board confirms/approves all items above
-2. Piyush enters everything into App Store Connect and selects the current build
-3. Submit for review — Apple reviews in **1–3 business days** (first submission)
-4. If approved → app goes live on the App Store
-5. If rejected → Apple gives specific reasons; most first-submission rejections are minor and fixable same day
-
----
-
-## Summary Checklist
-
-| Item | Proposed Value | Owner | Status |
-|---|---|---|---|
-| App Name | Board Connect | — | ✅ Ready |
-| Subtitle | Learn. Connect. Grow. | — | ✅ Ready |
-| Description | See Section 2 above | Board | ❓ Approve |
-| Promotional Text | See Section 2 above | Board | ❓ Approve |
-| Keywords | See Section 2 above | Board | ❓ Approve |
-| Support URL | board.com/en/support | Board | ❓ Confirm |
-| Marketing URL | board.com/en/board-academy | — | ✅ Ready |
-| Privacy Policy URL | board.com/privacy-policy | Board Legal | ❓ Confirm |
-| Privacy Labels | Name, Email, User ID linked to user | Board Legal | ❓ Sign off |
-| Age Rating | 17+ (standard for WebView apps) | Board | ❓ Confirm |
-| App Icon 1024×1024 | Icon-1024.png | — | ✅ Done |
-| Screenshots (6.9" iPhone) | 5 suggested screens — see Section 7 | Board / Piyush | ❓ Capture |
-| Demo Account | apple-review@board.com (suggested) | Board | ❓ Create |
-| App Preview Video | Optional | Board | ❓ Optional |
-| Build to submit | Current TestFlight build | — | ✅ Ready |
+| Item | Value | Status |
+|---|---|---|
+| App Name | Board Connect | ✅ Ready |
+| Subtitle | Learn. Connect. Grow. | ✅ Ready |
+| Description | Approved by Board marketing | ✅ Ready |
+| Promotional Text | Approved by Board marketing | ✅ Ready |
+| Keywords | Approved by Board marketing | ✅ Ready |
+| Support URL | board.com/en/support | ❓ Board to confirm |
+| Marketing URL | board.com/en/board-academy | ✅ Ready |
+| Privacy Policy URL | board.com/privacy-policy | ❓ Board legal to confirm |
+| Privacy Labels | Name, Email, User ID | ❓ Board legal to sign off |
+| Age Rating | 4+ (requires domain restriction) | ❓ Code change needed |
+| App Icon | Current padded icon | ❓ New icon from Board graphics pending |
+| Screenshots | 5 screens on iPhone 6.9" | ❓ Piyush to capture |
+| Demo Account | Working Skilljar login | ❓ Piyush to obtain |
+| App Preview Video | Optional | ❓ Optional |
+| Build | Current TestFlight build | ✅ Ready (pending above changes) |
