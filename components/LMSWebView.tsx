@@ -48,7 +48,11 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
         Linking.openURL(url).catch(() => {});
         return false;
       }
-      return true;
+      // Restrict to Board/Skilljar domains so Apple rates the app 4+ (not 17+)
+      const ALLOWED = ['.board.com', '.skilljar.com', '.skilljar.app', '.vanillacommunities.com'];
+      if (ALLOWED.some((domain) => url.includes(domain))) return true;
+      Linking.openURL(url).catch(() => {});
+      return false;
     }
 
     return (
