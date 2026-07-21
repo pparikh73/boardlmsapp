@@ -102,7 +102,7 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
               var style = document.createElement('style');
               style.innerHTML = [
                 '.sj-powered-by { display: none !important; }',
-                'html, body { max-width: 100% !important; overflow-x: hidden !important; }'
+                'body { overflow-x: hidden !important; }'
               ].join('');
               document.head.appendChild(style);
 
