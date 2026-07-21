@@ -102,7 +102,8 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
               var style = document.createElement('style');
               style.innerHTML = [
                 '.sj-powered-by { display: none !important; }',
-                'body { overflow-x: hidden !important; }'
+                'body { overflow-x: hidden !important; }',
+                'header { position: relative !important; top: auto !important; }'
               ].join('');
               document.head.appendChild(style);
 
@@ -133,19 +134,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 return null;
               };
 
-              // Make site header scroll with content instead of staying fixed/sticky
-              function unstickHeaders() {
-                document.querySelectorAll('header, nav').forEach(function(el) {
-                  var pos = window.getComputedStyle(el).position;
-                  if (pos === 'fixed' || pos === 'sticky') {
-                    el.style.setProperty('position', 'relative', 'important');
-                    el.style.setProperty('top', 'auto', 'important');
-                  }
-                });
-              }
-              unstickHeaders();
-              var stickyObserver = new MutationObserver(unstickHeaders);
-              stickyObserver.observe(document.body, { childList: true });
 
               // Only release video memory if the user actually played the video
               var userPlayedVideos = new WeakSet();
