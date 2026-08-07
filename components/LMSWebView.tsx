@@ -136,42 +136,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 return null;
               };
 
-              // Make site header scroll with content — runs after site scroll handlers reapply fixed
-              function unstickHeaders() {
-                document.querySelectorAll('header, nav').forEach(function(el) {
-                  var pos = window.getComputedStyle(el).position;
-                  if (pos === 'fixed' || pos === 'sticky') {
-                    el.style.setProperty('position', 'relative', 'important');
-                    el.style.setProperty('top', 'auto', 'important');
-                  }
-                  // Watch each element's style/class for scroll-handler changes
-                  if (!el._bcObserver) {
-                    el._bcObserver = true;
-                    new MutationObserver(function() {
-                      var p = window.getComputedStyle(el).position;
-                      if (p === 'fixed' || p === 'sticky') {
-                        el.style.setProperty('position', 'relative', 'important');
-                        el.style.setProperty('top', 'auto', 'important');
-                      }
-                    }).observe(el, { attributes: true, attributeFilter: ['style', 'class'] });
-                  }
-                });
-              }
-              unstickHeaders();
-              window.addEventListener('scroll', unstickHeaders, { passive: true });
-              new MutationObserver(unstickHeaders).observe(document.body, { childList: true });
-
-              // Hide language name text in header (keep globe icon)
-              function hideLanguageText() {
-                document.querySelectorAll('header *').forEach(function(el) {
-                  if (el.children.length === 0 && /^(English|Français|Deutsch|Español|Italiano|Português|简体中文|日本語|한국어)$/.test(el.textContent.trim())) {
-                    el.style.setProperty('display', 'none', 'important');
-                  }
-                });
-              }
-              hideLanguageText();
-              new MutationObserver(hideLanguageText).observe(document.body, { childList: true, subtree: true });
-
               // Only release video memory if the user actually played the video
               var userPlayedVideos = new WeakSet();
               document.addEventListener('play', function(e) {
