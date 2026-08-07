@@ -1,8 +1,13 @@
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform } from 'react-native';
 import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { BRAND } from '../constants/skilljar';
+
+const USER_AGENT = Platform.select({
+  ios: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+  android: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36',
+});
 
 interface LMSWebViewProps {
   url: string;
@@ -95,15 +100,18 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           mediaPlaybackRequiresUserAction={true}
           setSupportMultipleWindows={false}
           allowsBackForwardNavigationGestures
-          userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+          userAgent={USER_AGENT}
           onContentProcessDidTerminate={() => webViewRef.current?.reload()}
           injectedJavaScript={`
             (function() {
               var style = document.createElement('style');
-              style.innerHTML = [
-                '.sj-powered-by { display: none !important; }',
-                'body { overflow-x: hidden !important; }'
-              ].join('');
+              var rules = ['.sj-powered-by { display: none !important; }'];
+              // overflow-x:hidden on body can collapse flex/grid children to min-content
+              // width on some Android WebView versions; iOS needs it to stop pan-bounce.
+              if (${Platform.OS === 'ios'}) {
+                rules.push('body { overflow-x: hidden !important; }');
+              }
+              style.innerHTML = rules.join('');
               document.head.appendChild(style);
 
               // Ensure iframes (Vimeo, Synthesia, etc.) receive the correct Referer header
