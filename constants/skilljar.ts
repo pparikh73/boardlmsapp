@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 // Skilljar domain and auth configuration for Board Academy
 export const SKILLJAR_DOMAIN = '34t7lq90dtcj7';
 export const SKILLJAR_BASE_URL = 'https://accounts.skilljar.com';
@@ -77,6 +79,17 @@ export const COMMUNITY_SECTIONS = [
 ] as const;
 
 export const SUPPORT_EMAIL = 'academy@board.com';
+
+// Shared across all in-app WebViews (Academy + Community) so both platforms
+// send a user agent matching their actual rendering engine.
+export const WEBVIEW_USER_AGENT = Platform.select({
+  ios: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+  android: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36',
+});
+
+// Domains allowed to load in-app; anything else opens in the system browser.
+// Keeps "Unrestricted web access" truthfully answered "No" for Apple's 4+ age rating.
+export const ALLOWED_WEBVIEW_DOMAINS = ['.board.com', '.skilljar.com', '.skilljar.app', '.vanillacommunities.com'];
 
 // Board Visual Identity Guidelines v3.0 — May 2024
 // Primary color (standalone use always permitted)

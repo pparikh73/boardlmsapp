@@ -2,12 +2,7 @@ import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 're
 import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform } from 'react-native';
 import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
-import { BRAND } from '../constants/skilljar';
-
-const USER_AGENT = Platform.select({
-  ios: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-  android: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36',
-});
+import { BRAND, WEBVIEW_USER_AGENT, ALLOWED_WEBVIEW_DOMAINS } from '../constants/skilljar';
 
 interface LMSWebViewProps {
   url: string;
@@ -54,8 +49,7 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
         return false;
       }
       // Restrict to Board/Skilljar domains so Apple rates the app 4+ (not 17+)
-      const ALLOWED = ['.board.com', '.skilljar.com', '.skilljar.app', '.vanillacommunities.com'];
-      if (ALLOWED.some((domain) => url.includes(domain))) return true;
+      if (ALLOWED_WEBVIEW_DOMAINS.some((domain) => url.includes(domain))) return true;
       Linking.openURL(url).catch(() => {});
       return false;
     }
@@ -100,8 +94,9 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           mediaPlaybackRequiresUserAction={true}
           setSupportMultipleWindows={false}
           allowsBackForwardNavigationGestures
-          userAgent={USER_AGENT}
+          userAgent={WEBVIEW_USER_AGENT}
           onContentProcessDidTerminate={() => webViewRef.current?.reload()}
+          onRenderProcessGone={() => webViewRef.current?.reload()}
           injectedJavaScript={`
             (function() {
               var style = document.createElement('style');

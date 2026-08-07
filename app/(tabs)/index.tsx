@@ -3,13 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   Linking,
   StatusBar,
   Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, router, useNavigation } from 'expo-router';
 import LMSWebView, { LMSWebViewHandle } from '../../components/LMSWebView';
 import { getSession, logout, type Session } from '../../services/auth';

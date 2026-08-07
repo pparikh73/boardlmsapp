@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, SafeAreaView, Pressable, Text } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Pressable, Text } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import { router, useLocalSearchParams } from 'expo-router';
 import { BRAND, SKILLJAR_CONTENT_URL, COMMUNITY_BASE_URL } from '../constants/skilljar';

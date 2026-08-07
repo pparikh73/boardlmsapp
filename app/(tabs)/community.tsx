@@ -1,9 +1,10 @@
 import { useRef, useEffect, useCallback } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, SafeAreaView, StatusBar } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { View, TouchableOpacity, Text, StyleSheet, StatusBar, Platform, Linking } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { WebView, WebViewRequest } from 'react-native-webview';
 import { useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COMMUNITY_BASE_URL, BRAND } from '../../constants/skilljar';
+import { COMMUNITY_BASE_URL, BRAND, WEBVIEW_USER_AGENT, ALLOWED_WEBVIEW_DOMAINS } from '../../constants/skilljar';
 
 export default function CommunityTab() {
   const webViewRef = useRef<WebView>(null);
@@ -18,6 +19,18 @@ export default function CommunityTab() {
     });
     return unsubscribe;
   }, [navigation]);
+
+  function handleShouldStartLoadWithRequest(request: WebViewRequest): boolean {
+    const { url } = request;
+    if (!url.startsWith('http')) {
+      Linking.openURL(url).catch(() => {});
+      return false;
+    }
+    // Restrict to Board/Community domains so Apple rates the app 4+ (not 17+)
+    if (ALLOWED_WEBVIEW_DOMAINS.some((domain) => url.includes(domain))) return true;
+    Linking.openURL(url).catch(() => {});
+    return false;
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -51,13 +64,18 @@ export default function CommunityTab() {
         ref={webViewRef}
         source={{ uri: COMMUNITY_BASE_URL }}
         style={{ flex: 1 }}
+        onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
+        overScrollMode="never"
+        directionalLockEnabled
         allowsBackForwardNavigationGestures
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
         setSupportMultipleWindows={false}
-        userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        userAgent={WEBVIEW_USER_AGENT}
+        onContentProcessDidTerminate={() => webViewRef.current?.reload()}
+        onRenderProcessGone={() => webViewRef.current?.reload()}
         injectedJavaScriptBeforeContentLoaded={`
           (function() {
             var meta = document.querySelector('meta[name="viewport"]');
@@ -76,7 +94,13 @@ export default function CommunityTab() {
           (function() {
             // Base styles
             var style = document.createElement('style');
-            style.textContent = 'html, body { overflow-x: hidden !important; width: 100% !important; max-width: 100vw !important; }';
+            var baseRule = 'html, body { width: 100% !important; max-width: 100vw !important; }';
+            // overflow-x:hidden can collapse flex/grid children to min-content width on
+            // some Android WebView versions; iOS needs it to stop the pan-bounce edge glow.
+            if (${Platform.OS === 'ios'}) {
+              baseRule = 'html, body { overflow-x: hidden !important; width: 100% !important; max-width: 100vw !important; }';
+            }
+            style.textContent = baseRule;
 
             // Ensure iframes (Vimeo, Synthesia, etc.) receive the correct Referer header
             var meta = document.querySelector('meta[name="referrer"]');
