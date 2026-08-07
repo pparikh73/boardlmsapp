@@ -4,6 +4,7 @@ import { Stack, router } from 'expo-router';
 import Head from 'expo-router/head';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getSession } from '../services/auth';
 import { BRAND } from '../constants/skilljar';
 
@@ -32,7 +33,7 @@ export default function RootLayout() {
   if (!ready) return null;
 
   return (
-    <>
+    <SafeAreaProvider>
       <Head>
         <meta name="application-name" content="Board Connect" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -48,6 +49,6 @@ export default function RootLayout() {
         <Stack.Screen name="sso-webview" />
         <Stack.Screen name="(tabs)" />
       </Stack>
-    </>
+    </SafeAreaProvider>
   );
 }

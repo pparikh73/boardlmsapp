@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // #F39325 = orange from the Board "b" logo lower stripe gradient (official brand asset)
 const ACTIVE = '#F39325';
@@ -7,6 +8,8 @@ const INACTIVE = '#5c6584';
 const TAB_BG = '#161b2a';
 
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tabs
       screenOptions={{
@@ -16,8 +19,8 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: TAB_BG,
           borderTopWidth: 0,
-          height: 68,
-          paddingBottom: 12,
+          height: 56 + insets.bottom,
+          paddingBottom: Math.max(insets.bottom, 12),
           paddingTop: 6,
         },
         tabBarLabelStyle: {
