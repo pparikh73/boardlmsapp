@@ -39,6 +39,9 @@
       "autoIncrement": true,
       "ios": {
         "credentialsSource": "remote"
+      },
+      "android": {
+        "buildType": "app-bundle"
       }
     }
   },
@@ -49,6 +52,10 @@
         "ascApiKeyIssuerId": "c99fec98-68c8-4de7-9e0e-84e4002be8fc",
         "ascApiKeyId": "LBBW2M2HA6",
         "ascApiKeyPath": "/home/user/AuthKey_LBBW2M2HA6.p8"
+      },
+      "android": {
+        "track": "internal",
+        "serviceAccountKeyPath": "/home/user/google-play-service-account.json"
       }
     }
   }
