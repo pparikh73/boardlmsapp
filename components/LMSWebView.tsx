@@ -136,6 +136,47 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 return null;
               };
 
+              // Find the site's pinned top bar by actual computed position, not tag name —
+              // some sites style a <div> as the header instead of using a semantic <header> tag,
+              // which silently breaks tag-based selectors like 'header, nav'.
+              var bcKnownHeader = null;
+              function findStickyHeader() {
+                if (bcKnownHeader && document.body.contains(bcKnownHeader)) {
+                  var kcs = window.getComputedStyle(bcKnownHeader);
+                  if (kcs.position === 'fixed' || kcs.position === 'sticky') return bcKnownHeader;
+                }
+                var all = document.body.getElementsByTagName('*');
+                for (var i = 0; i < all.length; i++) {
+                  var el = all[i];
+                  var cs = window.getComputedStyle(el);
+                  if (cs.position !== 'fixed' && cs.position !== 'sticky') continue;
+                  var rect = el.getBoundingClientRect();
+                  if (rect.top <= 5 && rect.width >= window.innerWidth * 0.7 && rect.height > 0 && rect.height < 200) {
+                    bcKnownHeader = el;
+                    return el;
+                  }
+                }
+                return null;
+              }
+
+              function unstickHeader() {
+                var header = findStickyHeader();
+                if (!header) return;
+                header.style.setProperty('position', 'relative', 'important');
+                header.style.setProperty('top', 'auto', 'important');
+                // Hide language name text within the real header (keep the globe icon)
+                header.querySelectorAll('*').forEach(function(el) {
+                  if (el.children.length === 0 && /^(English|Français|Deutsch|Español|Italiano|Português|简体中文|日本語|한국어)$/.test((el.textContent || '').trim())) {
+                    el.style.setProperty('display', 'none', 'important');
+                  }
+                });
+              }
+              unstickHeader();
+              // Scroll listener catches the site re-applying fixed positioning via inline
+              // style on scroll (a childList mutation observer alone wouldn't see that).
+              window.addEventListener('scroll', unstickHeader, { passive: true });
+              new MutationObserver(unstickHeader).observe(document.body, { childList: true, subtree: true });
+
               // Only release video memory if the user actually played the video
               var userPlayedVideos = new WeakSet();
               document.addEventListener('play', function(e) {
