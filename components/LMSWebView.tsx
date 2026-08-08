@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform } from 'react-native';
-import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform, Alert } from 'react-native';
+import { WebView, WebViewNavigation, WebViewRequest, WebViewMessageEvent } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { BRAND, WEBVIEW_USER_AGENT, ALLOWED_WEBVIEW_DOMAINS } from '../constants/skilljar';
 
@@ -35,6 +35,13 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
         );
       }
     }, [isFocused]);
+
+    function handleMessage(event: WebViewMessageEvent) {
+      const data = event.nativeEvent.data;
+      if (data.startsWith('LANG_DIAG::')) {
+        Alert.alert('Language text diagnostic', data.slice('LANG_DIAG::'.length));
+      }
+    }
 
     function handleNavigationChange(nav: WebViewNavigation) {
       if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
@@ -86,6 +93,7 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           }}
           onNavigationStateChange={handleNavigationChange}
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
+          onMessage={handleMessage}
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
           overScrollMode="never"
@@ -188,6 +196,46 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
               // style on scroll (a childList mutation observer alone wouldn't see that).
               window.addEventListener('scroll', runFixes, { passive: true });
               new MutationObserver(runFixes).observe(document.body, { childList: true, subtree: true });
+
+              // TEMPORARY DIAGNOSTIC — find where "English" actually lives (top doc, shadow
+              // DOM, or an iframe) since three blind DOM-search attempts have all failed to
+              // find/hide it. Remove once the real location is known.
+              setTimeout(function() {
+                function findMatches(root, path, results) {
+                  var elements = root.querySelectorAll('*');
+                  for (var i = 0; i < elements.length; i++) {
+                    var el = elements[i];
+                    if (el.children.length === 0 && /English/i.test((el.textContent || '').trim())) {
+                      results.push(path + ' <' + el.tagName + ' class="' + (el.className || '') + '">: "' + (el.textContent || '').trim().slice(0, 40) + '"');
+                    }
+                    if (el.shadowRoot) {
+                      findMatches(el.shadowRoot, path + ' > shadow(' + el.tagName + ')', results);
+                    }
+                  }
+                }
+                var results = [];
+                findMatches(document, 'top-doc', results);
+
+                var iframeInfo = [];
+                document.querySelectorAll('iframe').forEach(function(f, idx) {
+                  var accessible = false;
+                  try {
+                    var doc = f.contentDocument;
+                    accessible = !!doc;
+                    if (doc) findMatches(doc, 'iframe[' + idx + ']', results);
+                  } catch (e) {
+                    accessible = false;
+                  }
+                  iframeInfo.push('iframe[' + idx + '] src=' + (f.src || '(none)').slice(0, 60) + ' accessible=' + accessible);
+                });
+
+                var report = 'Matches (' + results.length + '):\\n' + results.join('\\n') +
+                  '\\n\\nIframes (' + iframeInfo.length + '):\\n' + iframeInfo.join('\\n');
+
+                if (window.ReactNativeWebView) {
+                  window.ReactNativeWebView.postMessage('LANG_DIAG::' + report);
+                }
+              }, 2500);
 
               // Only release video memory if the user actually played the video
               var userPlayedVideos = new WeakSet();
