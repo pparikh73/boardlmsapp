@@ -181,6 +181,16 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 var all = document.body.getElementsByTagName('*');
                 for (var i = 0; i < all.length; i++) {
                   var el = all[i];
+                  // A <select>'s visible text is its selected <option>, rendered natively by
+                  // the browser — it isn't a separate DOM node display:none can hide. Hide
+                  // the text color instead, keeping the control (and any icon) clickable.
+                  if (el.tagName === 'SELECT') {
+                    var selected = el.options && el.options[el.selectedIndex];
+                    if (selected && LANG_RE.test((selected.text || '').trim())) {
+                      el.style.setProperty('color', 'transparent', 'important');
+                    }
+                    continue;
+                  }
                   if (el.children.length === 0 && LANG_RE.test((el.textContent || '').trim())) {
                     el.style.setProperty('display', 'none', 'important');
                   }
