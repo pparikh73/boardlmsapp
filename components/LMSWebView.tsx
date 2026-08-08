@@ -164,18 +164,30 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 if (!header) return;
                 header.style.setProperty('position', 'relative', 'important');
                 header.style.setProperty('top', 'auto', 'important');
-                // Hide language name text within the real header (keep the globe icon)
-                header.querySelectorAll('*').forEach(function(el) {
-                  if (el.children.length === 0 && /^(English|Français|Deutsch|Español|Italiano|Português|简体中文|日本語|한국어)$/.test((el.textContent || '').trim())) {
+              }
+
+              // Hide language name text wherever it appears — searched independently of
+              // the sticky-header detection so a miss on one doesn't block the other.
+              var LANG_RE = /^(English|Français|Deutsch|Español|Italiano|Português|简体中文|日本語|한국어)$/;
+              function hideLanguageText() {
+                var all = document.body.getElementsByTagName('*');
+                for (var i = 0; i < all.length; i++) {
+                  var el = all[i];
+                  if (el.children.length === 0 && LANG_RE.test((el.textContent || '').trim())) {
                     el.style.setProperty('display', 'none', 'important');
                   }
-                });
+                }
               }
-              unstickHeader();
+
+              function runFixes() {
+                unstickHeader();
+                hideLanguageText();
+              }
+              runFixes();
               // Scroll listener catches the site re-applying fixed positioning via inline
               // style on scroll (a childList mutation observer alone wouldn't see that).
-              window.addEventListener('scroll', unstickHeader, { passive: true });
-              new MutationObserver(unstickHeader).observe(document.body, { childList: true, subtree: true });
+              window.addEventListener('scroll', runFixes, { passive: true });
+              new MutationObserver(runFixes).observe(document.body, { childList: true, subtree: true });
 
               // Only release video memory if the user actually played the video
               var userPlayedVideos = new WeakSet();
