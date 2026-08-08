@@ -187,7 +187,12 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   if (el.tagName === 'SELECT') {
                     var selected = el.options && el.options[el.selectedIndex];
                     if (selected && LANG_RE.test((selected.text || '').trim())) {
+                      // Plain 'color' isn't always respected for native <select> text
+                      // rendering on some Android WebView builds — -webkit-text-fill-color
+                      // controls the glyph fill directly and is more reliable there.
                       el.style.setProperty('color', 'transparent', 'important');
+                      el.style.setProperty('-webkit-text-fill-color', 'transparent', 'important');
+                      el.style.setProperty('text-shadow', 'none', 'important');
                     }
                     continue;
                   }
