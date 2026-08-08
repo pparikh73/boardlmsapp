@@ -207,16 +207,29 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
               window.addEventListener('scroll', runFixes, { passive: true });
               new MutationObserver(runFixes).observe(document.body, { childList: true, subtree: true });
 
-              // TEMPORARY DIAGNOSTIC — find where "English" actually lives (top doc, shadow
-              // DOM, or an iframe) since three blind DOM-search attempts have all failed to
-              // find/hide it. Remove once the real location is known.
+              // TEMPORARY DIAGNOSTIC — text-content matching alone can't tell us WHICH
+              // element is actually rendering on screen vs. an invisible decoy. Report
+              // position + visibility for each match so the real one can be identified.
               setTimeout(function() {
+                function describe(el) {
+                  var r = el.getBoundingClientRect();
+                  var cs = window.getComputedStyle(el);
+                  var visible = r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' && cs.color !== 'rgba(0, 0, 0, 0)' && cs.color !== 'transparent';
+                  return '<' + el.tagName + '> top=' + Math.round(r.top) + ' left=' + Math.round(r.left) +
+                    ' w=' + Math.round(r.width) + ' h=' + Math.round(r.height) +
+                    ' color=' + cs.color + ' vis=' + visible;
+                }
                 function findMatches(root, path, results) {
                   var elements = root.querySelectorAll('*');
                   for (var i = 0; i < elements.length; i++) {
                     var el = elements[i];
-                    if (el.children.length === 0 && /English/i.test((el.textContent || '').trim())) {
-                      results.push(path + ' <' + el.tagName + ' class="' + (el.className || '') + '">: "' + (el.textContent || '').trim().slice(0, 40) + '"');
+                    if (el.tagName === 'SELECT') {
+                      var sel = el.options && el.options[el.selectedIndex];
+                      if (sel && /English/i.test((sel.text || '').trim())) {
+                        results.push(path + ' SELECT.selected="' + sel.text.trim() + '" ' + describe(el));
+                      }
+                    } else if (el.children.length === 0 && /English/i.test((el.textContent || '').trim())) {
+                      results.push(path + ' ' + describe(el) + ' text="' + (el.textContent || '').trim().slice(0, 30) + '"');
                     }
                     if (el.shadowRoot) {
                       findMatches(el.shadowRoot, path + ' > shadow(' + el.tagName + ')', results);
@@ -224,23 +237,9 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   }
                 }
                 var results = [];
-                findMatches(document, 'top-doc', results);
+                findMatches(document, 'doc', results);
 
-                var iframeInfo = [];
-                document.querySelectorAll('iframe').forEach(function(f, idx) {
-                  var accessible = false;
-                  try {
-                    var doc = f.contentDocument;
-                    accessible = !!doc;
-                    if (doc) findMatches(doc, 'iframe[' + idx + ']', results);
-                  } catch (e) {
-                    accessible = false;
-                  }
-                  iframeInfo.push('iframe[' + idx + '] src=' + (f.src || '(none)').slice(0, 60) + ' accessible=' + accessible);
-                });
-
-                var report = 'Matches (' + results.length + '):\\n' + results.join('\\n') +
-                  '\\n\\nIframes (' + iframeInfo.length + '):\\n' + iframeInfo.join('\\n');
+                var report = 'Matches (' + results.length + '), viewport w=' + window.innerWidth + ':\\n' + results.join('\\n');
 
                 if (window.ReactNativeWebView) {
                   window.ReactNativeWebView.postMessage('LANG_DIAG::' + report);
