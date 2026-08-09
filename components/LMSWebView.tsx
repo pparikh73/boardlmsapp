@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform, Alert } from 'react-native';
-import { WebView, WebViewNavigation, WebViewRequest, WebViewMessageEvent } from 'react-native-webview';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform } from 'react-native';
+import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { BRAND, WEBVIEW_USER_AGENT, ALLOWED_WEBVIEW_DOMAINS } from '../constants/skilljar';
 
@@ -35,13 +35,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
         );
       }
     }, [isFocused]);
-
-    function handleMessage(event: WebViewMessageEvent) {
-      const data = event.nativeEvent.data;
-      if (data.startsWith('LANG_DIAG::')) {
-        Alert.alert('Language text diagnostic', data.slice('LANG_DIAG::'.length));
-      }
-    }
 
     function handleNavigationChange(nav: WebViewNavigation) {
       if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
@@ -93,7 +86,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           }}
           onNavigationStateChange={handleNavigationChange}
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
-          onMessage={handleMessage}
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
           overScrollMode="never"
@@ -211,45 +203,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
               // style on scroll (a childList mutation observer alone wouldn't see that).
               window.addEventListener('scroll', runFixes, { passive: true });
               new MutationObserver(runFixes).observe(document.body, { childList: true, subtree: true });
-
-              // TEMPORARY DIAGNOSTIC — text-content matching alone can't tell us WHICH
-              // element is actually rendering on screen vs. an invisible decoy. Report
-              // position + visibility for each match so the real one can be identified.
-              setTimeout(function() {
-                function describe(el) {
-                  var r = el.getBoundingClientRect();
-                  var cs = window.getComputedStyle(el);
-                  var visible = r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' && cs.color !== 'rgba(0, 0, 0, 0)' && cs.color !== 'transparent';
-                  return '<' + el.tagName + '> top=' + Math.round(r.top) + ' left=' + Math.round(r.left) +
-                    ' w=' + Math.round(r.width) + ' h=' + Math.round(r.height) +
-                    ' color=' + cs.color + ' vis=' + visible;
-                }
-                function findMatches(root, path, results) {
-                  var elements = root.querySelectorAll('*');
-                  for (var i = 0; i < elements.length; i++) {
-                    var el = elements[i];
-                    if (el.tagName === 'SELECT') {
-                      var sel = el.options && el.options[el.selectedIndex];
-                      if (sel && /English/i.test((sel.text || '').trim())) {
-                        results.push(path + ' SELECT.selected="' + sel.text.trim() + '" ' + describe(el));
-                      }
-                    } else if (el.children.length === 0 && /English/i.test((el.textContent || '').trim())) {
-                      results.push(path + ' ' + describe(el) + ' text="' + (el.textContent || '').trim().slice(0, 30) + '"');
-                    }
-                    if (el.shadowRoot) {
-                      findMatches(el.shadowRoot, path + ' > shadow(' + el.tagName + ')', results);
-                    }
-                  }
-                }
-                var results = [];
-                findMatches(document, 'doc', results);
-
-                var report = 'Matches (' + results.length + '), viewport w=' + window.innerWidth + ':\\n' + results.join('\\n');
-
-                if (window.ReactNativeWebView) {
-                  window.ReactNativeWebView.postMessage('LANG_DIAG::' + report);
-                }
-              }, 2500);
 
               // Only release video memory if the user actually played the video
               var userPlayedVideos = new WeakSet();
