@@ -97,6 +97,20 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           userAgent={WEBVIEW_USER_AGENT}
           onContentProcessDidTerminate={() => webViewRef.current?.reload()}
           onRenderProcessGone={() => webViewRef.current?.reload()}
+          injectedJavaScriptBeforeContentLoaded={`
+            (function() {
+              var meta = document.querySelector('meta[name="viewport"]');
+              if (meta) {
+                meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0';
+              } else {
+                var m = document.createElement('meta');
+                m.name = 'viewport';
+                m.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0';
+                document.head.appendChild(m);
+              }
+            })();
+            true;
+          `}
           injectedJavaScript={`
             (function() {
               var style = document.createElement('style');
@@ -179,9 +193,12 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   if (el.tagName === 'SELECT') {
                     var selected = el.options && el.options[el.selectedIndex];
                     if (selected && LANG_RE.test((selected.text || '').trim())) {
-                      // Plain 'color' isn't always respected for native <select> text
-                      // rendering on some Android WebView builds — -webkit-text-fill-color
-                      // controls the glyph fill directly and is more reliable there.
+                      // iOS renders <select> using the native OS picker chrome, which ignores
+                      // color/-webkit-text-fill-color entirely unless the native appearance is
+                      // disabled first — Android's WebView is web-styleable by default so this
+                      // wasn't needed there.
+                      el.style.setProperty('-webkit-appearance', 'none', 'important');
+                      el.style.setProperty('appearance', 'none', 'important');
                       el.style.setProperty('color', 'transparent', 'important');
                       el.style.setProperty('-webkit-text-fill-color', 'transparent', 'important');
                       el.style.setProperty('text-shadow', 'none', 'important');
