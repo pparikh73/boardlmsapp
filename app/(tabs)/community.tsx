@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, StatusBar, Platform, Linking, Alert } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, StatusBar, Platform, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { WebView, WebViewRequest, WebViewMessageEvent } from 'react-native-webview';
+import { WebView, WebViewRequest } from 'react-native-webview';
 import { useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COMMUNITY_BASE_URL, BRAND, WEBVIEW_USER_AGENT, ALLOWED_WEBVIEW_DOMAINS } from '../../constants/skilljar';
@@ -19,13 +19,6 @@ export default function CommunityTab() {
     });
     return unsubscribe;
   }, [navigation]);
-
-  function handleMessage(event: WebViewMessageEvent) {
-    const data = event.nativeEvent.data;
-    if (data.startsWith('IMG_DIAG::')) {
-      Alert.alert('Broken image diagnostic', data.slice('IMG_DIAG::'.length));
-    }
-  }
 
   function handleShouldStartLoadWithRequest(request: WebViewRequest): boolean {
     const { url } = request;
@@ -72,7 +65,6 @@ export default function CommunityTab() {
         source={{ uri: COMMUNITY_BASE_URL }}
         style={{ flex: 1 }}
         onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
-        onMessage={handleMessage}
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
         overScrollMode="never"
@@ -122,13 +114,17 @@ export default function CommunityTab() {
             }
             document.head.appendChild(style);
 
-            // Find flex containers that overflow the viewport and force them to wrap (2 per row)
+            // Find flex containers that overflow the viewport and force them to wrap (2 per row).
+            // Only applies to row-direction containers (card grids) — forcing children to
+            // 50% width on a column-direction container (e.g. a vertically stacked hero
+            // text block) corrupts the layout into a collapsed single-character column.
             function fixOverflowingFlex() {
               var vw = window.innerWidth || document.documentElement.clientWidth;
               document.querySelectorAll('*').forEach(function(el) {
                 if (el.scrollWidth > vw + 10) {
                   var cs = window.getComputedStyle(el);
-                  if ((cs.display === 'flex' || cs.display === 'inline-flex') && cs.flexWrap === 'nowrap') {
+                  var isRow = cs.flexDirection === 'row' || cs.flexDirection === 'row-reverse' || !cs.flexDirection;
+                  if ((cs.display === 'flex' || cs.display === 'inline-flex') && cs.flexWrap === 'nowrap' && isRow) {
                     el.style.setProperty('flex-wrap', 'wrap', 'important');
                     Array.from(el.children).forEach(function(child) {
                       child.style.setProperty('flex', '0 0 50%', 'important');
@@ -144,22 +140,6 @@ export default function CommunityTab() {
             var observer = new MutationObserver(fixOverflowingFlex);
             observer.observe(document.body, { childList: true, subtree: true });
             window.open = function(url) { if (url) window.location.href = url; return null; };
-
-            // TEMPORARY DIAGNOSTIC — report any <img> that failed to load (naturalWidth 0)
-            // so we know what's actually broken instead of guessing. Remove after use.
-            setTimeout(function() {
-              var broken = [];
-              document.querySelectorAll('img').forEach(function(img) {
-                if (img.complete && img.naturalWidth === 0) {
-                  broken.push('src=' + (img.currentSrc || img.src || '(none)').slice(0, 90) +
-                    ' alt="' + (img.alt || '') + '"');
-                }
-              });
-              var report = 'Broken images (' + broken.length + '):\\n' + broken.join('\\n');
-              if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage('IMG_DIAG::' + report);
-              }
-            }, 3000);
           })();
           true;
         `}
