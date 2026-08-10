@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, StatusBar, Platform, Linking } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, StatusBar, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView, WebViewRequest } from 'react-native-webview';
 import { useNavigation } from 'expo-router';
@@ -92,18 +92,13 @@ export default function CommunityTab() {
         `}
         injectedJavaScript={`
           (function() {
-            // Base styles
+            // Base styles. overflow-x:hidden is intentionally NOT applied here on either
+            // platform — on this site it collapses the hero/header layout into a single
+            // collapsed column regardless of whether it's scoped to html, body, or both.
+            // directionalLockEnabled (native WebView prop) already prevents horizontal
+            // panning without touching the page's own CSS.
             var style = document.createElement('style');
-            var baseRule = 'html, body { width: 100% !important; max-width: 100vw !important; }';
-            // overflow-x:hidden can collapse flex/grid children to min-content width on
-            // some Android WebView versions; iOS needs it to stop the pan-bounce edge glow.
-            // Scoped to body only — applying to <html> creates a new WebKit containing
-            // block for any position:fixed descendant (like the site's own sticky header),
-            // which corrupts its layout into a collapsed single-character-wide column.
-            if (${Platform.OS === 'ios'}) {
-              baseRule = 'body { overflow-x: hidden !important; } html, body { width: 100% !important; max-width: 100vw !important; }';
-            }
-            style.textContent = baseRule;
+            style.textContent = 'html, body { width: 100% !important; max-width: 100vw !important; }';
 
             // Ensure iframes (Vimeo, Synthesia, etc.) receive the correct Referer header
             var meta = document.querySelector('meta[name="referrer"]');

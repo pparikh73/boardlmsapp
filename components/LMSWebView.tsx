@@ -220,6 +220,15 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
               // style on scroll (a childList mutation observer alone wouldn't see that).
               window.addEventListener('scroll', runFixes, { passive: true });
               new MutationObserver(runFixes).observe(document.body, { childList: true, subtree: true });
+              // The language <select>'s options can populate via a property change with no
+              // DOM node insertion/removal, which neither observer above would catch —
+              // poll briefly on load as a race-condition-proof safety net.
+              var bcPollCount = 0;
+              var bcPollTimer = setInterval(function() {
+                runFixes();
+                bcPollCount++;
+                if (bcPollCount > 20) clearInterval(bcPollTimer);
+              }, 300);
 
               // Only release video memory if the user actually played the video
               var userPlayedVideos = new WeakSet();
