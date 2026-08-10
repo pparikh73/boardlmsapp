@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform, Alert } from 'react-native';
-import { WebView, WebViewNavigation, WebViewRequest, WebViewMessageEvent } from 'react-native-webview';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform } from 'react-native';
+import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { BRAND, WEBVIEW_USER_AGENT, ALLOWED_WEBVIEW_DOMAINS } from '../constants/skilljar';
 
@@ -35,13 +35,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
         );
       }
     }, [isFocused]);
-
-    function handleMessage(event: WebViewMessageEvent) {
-      const data = event.nativeEvent.data;
-      if (data.startsWith('LANG_DIAG::')) {
-        Alert.alert('Language text diagnostic', data.slice('LANG_DIAG::'.length));
-      }
-    }
 
     function handleNavigationChange(nav: WebViewNavigation) {
       if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
@@ -93,7 +86,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           }}
           onNavigationStateChange={handleNavigationChange}
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
-          onMessage={handleMessage}
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
           overScrollMode="never"
@@ -228,34 +220,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
               // style on scroll (a childList mutation observer alone wouldn't see that).
               window.addEventListener('scroll', runFixes, { passive: true });
               new MutationObserver(runFixes).observe(document.body, { childList: true, subtree: true });
-
-              // TEMPORARY DIAGNOSTIC (iOS) — confirm whether the select-appearance fix
-              // actually applied, since the same fix that worked on Android is still
-              // showing 'English' visibly here. Remove once resolved.
-              setTimeout(function() {
-                var results = [];
-                var all = document.body.getElementsByTagName('*');
-                for (var i = 0; i < all.length; i++) {
-                  var el = all[i];
-                  if (el.tagName === 'SELECT') {
-                    var sel = el.options && el.options[el.selectedIndex];
-                    if (sel && /English/i.test((sel.text || '').trim())) {
-                      var r = el.getBoundingClientRect();
-                      var cs = window.getComputedStyle(el);
-                      results.push('SELECT top=' + Math.round(r.top) + ' left=' + Math.round(r.left) +
-                        ' w=' + Math.round(r.width) + ' h=' + Math.round(r.height) +
-                        ' appearance=' + cs.webkitAppearance +
-                        ' color=' + cs.color +
-                        ' -webkit-text-fill-color=' + cs.webkitTextFillColor +
-                        ' inlineStyle="' + el.getAttribute('style') + '"');
-                    }
-                  }
-                }
-                var report = 'viewport w=' + window.innerWidth + '\\n' + results.join('\\n');
-                if (window.ReactNativeWebView) {
-                  window.ReactNativeWebView.postMessage('LANG_DIAG::' + report);
-                }
-              }, 2500);
 
               // Only release video memory if the user actually played the video
               var userPlayedVideos = new WeakSet();
