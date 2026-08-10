@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, StatusBar, Platform, Linking } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, StatusBar, Platform, Linking, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { WebView, WebViewRequest } from 'react-native-webview';
+import { WebView, WebViewRequest, WebViewMessageEvent } from 'react-native-webview';
 import { useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COMMUNITY_BASE_URL, BRAND, WEBVIEW_USER_AGENT, ALLOWED_WEBVIEW_DOMAINS } from '../../constants/skilljar';
@@ -19,6 +19,13 @@ export default function CommunityTab() {
     });
     return unsubscribe;
   }, [navigation]);
+
+  function handleMessage(event: WebViewMessageEvent) {
+    const data = event.nativeEvent.data;
+    if (data.startsWith('FLEX_DIAG::')) {
+      Alert.alert('Flex fix diagnostic', data.slice('FLEX_DIAG::'.length));
+    }
+  }
 
   function handleShouldStartLoadWithRequest(request: WebViewRequest): boolean {
     const { url } = request;
@@ -65,6 +72,7 @@ export default function CommunityTab() {
         source={{ uri: COMMUNITY_BASE_URL }}
         style={{ flex: 1 }}
         onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
+        onMessage={handleMessage}
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
         overScrollMode="never"
@@ -118,6 +126,7 @@ export default function CommunityTab() {
             // Only applies to row-direction containers (card grids) — forcing children to
             // 50% width on a column-direction container (e.g. a vertically stacked hero
             // text block) corrupts the layout into a collapsed single-character column.
+            var bcFixLog = [];
             function fixOverflowingFlex() {
               var vw = window.innerWidth || document.documentElement.clientWidth;
               document.querySelectorAll('*').forEach(function(el) {
@@ -125,6 +134,11 @@ export default function CommunityTab() {
                   var cs = window.getComputedStyle(el);
                   var isRow = cs.flexDirection === 'row' || cs.flexDirection === 'row-reverse' || !cs.flexDirection;
                   if ((cs.display === 'flex' || cs.display === 'inline-flex') && cs.flexWrap === 'nowrap' && isRow) {
+                    if (!el._bcFlexFixed) {
+                      el._bcFlexFixed = true;
+                      bcFixLog.push('<' + el.tagName + ' class="' + (el.className || '') + '"> children=' +
+                        el.children.length + ' dir=' + cs.flexDirection + ' scrollW=' + el.scrollWidth + ' vw=' + vw);
+                    }
                     el.style.setProperty('flex-wrap', 'wrap', 'important');
                     Array.from(el.children).forEach(function(child) {
                       child.style.setProperty('flex', '0 0 50%', 'important');
@@ -140,6 +154,16 @@ export default function CommunityTab() {
             var observer = new MutationObserver(fixOverflowingFlex);
             observer.observe(document.body, { childList: true, subtree: true });
             window.open = function(url) { if (url) window.location.href = url; return null; };
+
+            // TEMPORARY DIAGNOSTIC — report exactly which elements fixOverflowingFlex()
+            // touched, since the row/column-direction fix didn't resolve the layout
+            // collapse and guessing again isn't productive. Remove once resolved.
+            setTimeout(function() {
+              var report = 'viewport w=' + window.innerWidth + ', fixed (' + bcFixLog.length + '):\\n' + bcFixLog.join('\\n');
+              if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage('FLEX_DIAG::' + report);
+              }
+            }, 3000);
           })();
           true;
         `}
