@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform } from 'react-native';
-import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform, Alert } from 'react-native';
+import { WebView, WebViewNavigation, WebViewRequest, WebViewMessageEvent } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { BRAND, WEBVIEW_USER_AGENT, ALLOWED_WEBVIEW_DOMAINS } from '../constants/skilljar';
 
@@ -36,6 +36,13 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
       }
     }, [isFocused]);
 
+    function handleMessage(event: WebViewMessageEvent) {
+      const data = event.nativeEvent.data;
+      if (data.startsWith('DIAG::')) {
+        Alert.alert('Real-device diagnostic', data.slice('DIAG::'.length));
+      }
+    }
+
     function handleNavigationChange(nav: WebViewNavigation) {
       if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
         onLogout?.();
@@ -44,6 +51,12 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
 
     function handleShouldStartLoadWithRequest(request: WebViewRequest): boolean {
       const { url } = request;
+      // Only restrict top-level (user-initiated) navigation. This callback also fires for
+      // iframe sub-resource loads (e.g. Synthesia's video player embed) — blocking those
+      // sent them out to the system browser instead of playing inline, since the video
+      // vendor's domain isn't in the allowlist. Apple's "unrestricted web access" concern
+      // is about the user browsing to arbitrary sites, not first-party embedded content.
+      if ((request as any).isTopFrame === false) return true;
       if (!url.startsWith('http')) {
         Linking.openURL(url).catch(() => {});
         return false;
@@ -86,6 +99,7 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           }}
           onNavigationStateChange={handleNavigationChange}
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
+          onMessage={handleMessage}
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
           overScrollMode="never"
@@ -242,6 +256,51 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   bcPollCount++;
                   if (bcPollCount > 30) clearInterval(bcPollTimer);
                 }, 300);
+
+                // TEMPORARY DIAGNOSTIC — real-device data, since Appetize simulator
+                // results didn't match what the real device shows. Reports the actual
+                // state of the header and language select after our fixes run. Remove
+                // once resolved.
+                setTimeout(function() {
+                  var lines = [];
+                  try {
+                    var header = findStickyHeader();
+                    if (header) {
+                      var hcs = window.getComputedStyle(header);
+                      var hr = header.getBoundingClientRect();
+                      lines.push('header: <' + header.tagName + ' class="' + (header.className || '') + '"> position=' + hcs.position + ' top=' + Math.round(hr.top));
+                    } else {
+                      lines.push('header: none found');
+                    }
+                  } catch (e) { lines.push('header check threw: ' + e.message); }
+
+                  try {
+                    var found = false;
+                    var all = document.body.getElementsByTagName('*');
+                    for (var i = 0; i < all.length; i++) {
+                      var el = all[i];
+                      if (el.tagName === 'SELECT') {
+                        var sel = el.options && el.options[el.selectedIndex];
+                        if (sel && LANG_RE.test((sel.text || '').trim())) {
+                          found = true;
+                          var scs = window.getComputedStyle(el);
+                          var sr = el.getBoundingClientRect();
+                          lines.push('select: top=' + Math.round(sr.top) + ' w=' + Math.round(sr.width) +
+                            ' appearance=' + scs.webkitAppearance + ' color=' + scs.color +
+                            ' fillColor=' + scs.webkitTextFillColor +
+                            ' style="' + el.getAttribute('style') + '"');
+                        }
+                      }
+                    }
+                    if (!found) lines.push('select: no matching English select found');
+                  } catch (e) { lines.push('select check threw: ' + e.message); }
+
+                  lines.push('viewport w=' + window.innerWidth + ' ua=' + navigator.userAgent.slice(0, 60));
+
+                  if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage('DIAG::' + lines.join('\\n'));
+                  }
+                }, 4000);
               } catch (e) {}
 
               try {

@@ -22,6 +22,9 @@ export default function CommunityTab() {
 
   function handleShouldStartLoadWithRequest(request: WebViewRequest): boolean {
     const { url } = request;
+    // Only restrict top-level (user-initiated) navigation — see LMSWebView.tsx for why
+    // iframe sub-resource loads must be allowed regardless of domain.
+    if ((request as any).isTopFrame === false) return true;
     if (!url.startsWith('http')) {
       Linking.openURL(url).catch(() => {});
       return false;
@@ -148,6 +151,38 @@ export default function CommunityTab() {
 
             try {
               window.open = function(url) { if (url) window.location.href = url; return null; };
+            } catch (e) {}
+
+            try {
+              // Find the site's pinned top bar by actual computed position, not tag name.
+              var bcKnownHeader = null;
+              function findStickyHeader() {
+                if (bcKnownHeader && document.body.contains(bcKnownHeader)) {
+                  var kcs = window.getComputedStyle(bcKnownHeader);
+                  if (kcs.position === 'fixed' || kcs.position === 'sticky') return bcKnownHeader;
+                }
+                var all = document.body.getElementsByTagName('*');
+                for (var i = 0; i < all.length; i++) {
+                  var el = all[i];
+                  var cs = window.getComputedStyle(el);
+                  if (cs.position !== 'fixed' && cs.position !== 'sticky') continue;
+                  var rect = el.getBoundingClientRect();
+                  if (rect.top <= 5 && rect.width >= window.innerWidth * 0.7 && rect.height > 0 && rect.height < 200) {
+                    bcKnownHeader = el;
+                    return el;
+                  }
+                }
+                return null;
+              }
+              function unstickHeader() {
+                var header = findStickyHeader();
+                if (!header) return;
+                header.style.setProperty('position', 'relative', 'important');
+                header.style.setProperty('top', 'auto', 'important');
+              }
+              unstickHeader();
+              window.addEventListener('scroll', unstickHeader, { passive: true });
+              new MutationObserver(unstickHeader).observe(document.body, { childList: true, subtree: true });
             } catch (e) {}
           })();
           true;
