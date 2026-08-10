@@ -113,140 +113,156 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           `}
           injectedJavaScript={`
             (function() {
-              var style = document.createElement('style');
-              var rules = ['.sj-powered-by { display: none !important; }'];
-              // overflow-x:hidden on body can collapse flex/grid children to min-content
-              // width on some Android WebView versions; iOS needs it to stop pan-bounce.
-              if (${Platform.OS === 'ios'}) {
-                rules.push('body { overflow-x: hidden !important; }');
-              }
-              style.innerHTML = rules.join('');
-              document.head.appendChild(style);
-
-              // Ensure iframes (Vimeo, Synthesia, etc.) receive the correct Referer header
-              var meta = document.querySelector('meta[name="referrer"]');
-              if (meta) {
-                meta.setAttribute('content', 'origin');
-              } else {
-                var refMeta = document.createElement('meta');
-                refMeta.name = 'referrer';
-                refMeta.content = 'origin';
-                document.head.appendChild(refMeta);
-              }
-
-              // Force inline playback on all videos (prevents iOS full-screen takeover)
-              function addPlaysinline() {
-                document.querySelectorAll('video').forEach(function(v) {
-                  v.setAttribute('playsinline', '');
-                  v.setAttribute('webkit-playsinline', '');
-                });
-              }
-              addPlaysinline();
-              var plObserver = new MutationObserver(addPlaysinline);
-              plObserver.observe(document.body, { childList: true, subtree: true });
-
-              window.open = function(url, target, features) {
-                if (url) { window.location.href = url; }
-                return null;
-              };
-
-              // Find the site's pinned top bar by actual computed position, not tag name —
-              // some sites style a <div> as the header instead of using a semantic <header> tag,
-              // which silently breaks tag-based selectors like 'header, nav'.
-              var bcKnownHeader = null;
-              function findStickyHeader() {
-                if (bcKnownHeader && document.body.contains(bcKnownHeader)) {
-                  var kcs = window.getComputedStyle(bcKnownHeader);
-                  if (kcs.position === 'fixed' || kcs.position === 'sticky') return bcKnownHeader;
+              // Every independent fix below is wrapped in its own try/catch so one
+              // throwing (e.g. an unexpected DOM shape on a given page) can't silently
+              // abort the rest of the script.
+              try {
+                var style = document.createElement('style');
+                var rules = ['.sj-powered-by { display: none !important; }'];
+                // overflow-x:hidden on body can collapse flex/grid children to min-content
+                // width on some Android WebView versions; iOS needs it to stop pan-bounce.
+                if (${Platform.OS === 'ios'}) {
+                  rules.push('body { overflow-x: hidden !important; }');
                 }
-                var all = document.body.getElementsByTagName('*');
-                for (var i = 0; i < all.length; i++) {
-                  var el = all[i];
-                  var cs = window.getComputedStyle(el);
-                  if (cs.position !== 'fixed' && cs.position !== 'sticky') continue;
-                  var rect = el.getBoundingClientRect();
-                  if (rect.top <= 5 && rect.width >= window.innerWidth * 0.7 && rect.height > 0 && rect.height < 200) {
-                    bcKnownHeader = el;
-                    return el;
+                style.innerHTML = rules.join('');
+                document.head.appendChild(style);
+              } catch (e) {}
+
+              try {
+                // Ensure iframes (Vimeo, Synthesia, etc.) receive the correct Referer header
+                var meta = document.querySelector('meta[name="referrer"]');
+                if (meta) {
+                  meta.setAttribute('content', 'origin');
+                } else {
+                  var refMeta = document.createElement('meta');
+                  refMeta.name = 'referrer';
+                  refMeta.content = 'origin';
+                  document.head.appendChild(refMeta);
+                }
+              } catch (e) {}
+
+              try {
+                // Force inline playback on all videos (prevents iOS full-screen takeover)
+                function addPlaysinline() {
+                  document.querySelectorAll('video').forEach(function(v) {
+                    v.setAttribute('playsinline', '');
+                    v.setAttribute('webkit-playsinline', '');
+                  });
+                }
+                addPlaysinline();
+                var plObserver = new MutationObserver(addPlaysinline);
+                plObserver.observe(document.body, { childList: true, subtree: true });
+              } catch (e) {}
+
+              try {
+                window.open = function(url, target, features) {
+                  if (url) { window.location.href = url; }
+                  return null;
+                };
+              } catch (e) {}
+
+              try {
+                // Find the site's pinned top bar by actual computed position, not tag name —
+                // some sites style a <div> as the header instead of using a semantic <header>
+                // tag, which silently breaks tag-based selectors like 'header, nav'.
+                var bcKnownHeader = null;
+                function findStickyHeader() {
+                  if (bcKnownHeader && document.body.contains(bcKnownHeader)) {
+                    var kcs = window.getComputedStyle(bcKnownHeader);
+                    if (kcs.position === 'fixed' || kcs.position === 'sticky') return bcKnownHeader;
                   }
-                }
-                return null;
-              }
-
-              function unstickHeader() {
-                var header = findStickyHeader();
-                if (!header) return;
-                header.style.setProperty('position', 'relative', 'important');
-                header.style.setProperty('top', 'auto', 'important');
-              }
-
-              // Hide language name text wherever it appears — searched independently of
-              // the sticky-header detection so a miss on one doesn't block the other.
-              var LANG_RE = /^(English|Français|Deutsch|Español|Italiano|Português|简体中文|日本語|한국어)$/;
-              function hideLanguageText() {
-                var all = document.body.getElementsByTagName('*');
-                for (var i = 0; i < all.length; i++) {
-                  var el = all[i];
-                  // A <select>'s visible text is its selected <option>, rendered natively by
-                  // the browser — it isn't a separate DOM node display:none can hide. Hide
-                  // the text color instead, keeping the control (and any icon) clickable.
-                  if (el.tagName === 'SELECT') {
-                    var selected = el.options && el.options[el.selectedIndex];
-                    if (selected && LANG_RE.test((selected.text || '').trim())) {
-                      // iOS renders <select> using the native OS picker chrome, which ignores
-                      // color/-webkit-text-fill-color entirely unless the native appearance is
-                      // disabled first — Android's WebView is web-styleable by default so this
-                      // wasn't needed there.
-                      el.style.setProperty('-webkit-appearance', 'none', 'important');
-                      el.style.setProperty('appearance', 'none', 'important');
-                      el.style.setProperty('color', 'transparent', 'important');
-                      el.style.setProperty('-webkit-text-fill-color', 'transparent', 'important');
-                      el.style.setProperty('text-shadow', 'none', 'important');
+                  var all = document.body.getElementsByTagName('*');
+                  for (var i = 0; i < all.length; i++) {
+                    var el = all[i];
+                    var cs = window.getComputedStyle(el);
+                    if (cs.position !== 'fixed' && cs.position !== 'sticky') continue;
+                    var rect = el.getBoundingClientRect();
+                    if (rect.top <= 5 && rect.width >= window.innerWidth * 0.7 && rect.height > 0 && rect.height < 200) {
+                      bcKnownHeader = el;
+                      return el;
                     }
-                    continue;
                   }
-                  if (el.children.length === 0 && LANG_RE.test((el.textContent || '').trim())) {
-                    el.style.setProperty('display', 'none', 'important');
+                  return null;
+                }
+
+                function unstickHeader() {
+                  var header = findStickyHeader();
+                  if (!header) return;
+                  header.style.setProperty('position', 'relative', 'important');
+                  header.style.setProperty('top', 'auto', 'important');
+                }
+
+                // Hide language name text wherever it appears — searched independently of
+                // the sticky-header detection so a miss on one doesn't block the other.
+                var LANG_RE = /^(English|Français|Deutsch|Español|Italiano|Português|简体中文|日本語|한국어)$/;
+                function hideLanguageText() {
+                  var all = document.body.getElementsByTagName('*');
+                  for (var i = 0; i < all.length; i++) {
+                    var el = all[i];
+                    // A <select>'s visible text is its selected <option>, rendered natively
+                    // by the browser — it isn't a separate DOM node display:none can hide.
+                    // Hide the text color instead, keeping the control (and any icon)
+                    // clickable.
+                    if (el.tagName === 'SELECT') {
+                      var selected = el.options && el.options[el.selectedIndex];
+                      if (selected && LANG_RE.test((selected.text || '').trim())) {
+                        // iOS renders <select> using the native OS picker chrome, which
+                        // ignores color/-webkit-text-fill-color entirely unless the native
+                        // appearance is disabled first — Android's WebView is web-styleable
+                        // by default so this wasn't needed there.
+                        el.style.setProperty('-webkit-appearance', 'none', 'important');
+                        el.style.setProperty('appearance', 'none', 'important');
+                        el.style.setProperty('color', 'transparent', 'important');
+                        el.style.setProperty('-webkit-text-fill-color', 'transparent', 'important');
+                        el.style.setProperty('text-shadow', 'none', 'important');
+                      }
+                      continue;
+                    }
+                    if (el.children.length === 0 && LANG_RE.test((el.textContent || '').trim())) {
+                      el.style.setProperty('display', 'none', 'important');
+                    }
                   }
                 }
-              }
 
-              function runFixes() {
-                unstickHeader();
-                hideLanguageText();
-              }
-              runFixes();
-              // Scroll listener catches the site re-applying fixed positioning via inline
-              // style on scroll (a childList mutation observer alone wouldn't see that).
-              window.addEventListener('scroll', runFixes, { passive: true });
-              new MutationObserver(runFixes).observe(document.body, { childList: true, subtree: true });
-              // The language <select>'s options can populate via a property change with no
-              // DOM node insertion/removal, which neither observer above would catch —
-              // poll briefly on load as a race-condition-proof safety net.
-              var bcPollCount = 0;
-              var bcPollTimer = setInterval(function() {
+                function runFixes() {
+                  try { unstickHeader(); } catch (e) {}
+                  try { hideLanguageText(); } catch (e) {}
+                }
                 runFixes();
-                bcPollCount++;
-                if (bcPollCount > 20) clearInterval(bcPollTimer);
-              }, 300);
+                // Scroll listener catches the site re-applying fixed positioning via inline
+                // style on scroll (a childList mutation observer alone wouldn't see that).
+                window.addEventListener('scroll', runFixes, { passive: true });
+                new MutationObserver(runFixes).observe(document.body, { childList: true, subtree: true });
+                // The language <select>'s options can populate via a property change with
+                // no DOM node insertion/removal, which neither observer above would catch —
+                // poll for the first several seconds as a race-condition-proof safety net.
+                var bcPollCount = 0;
+                var bcPollTimer = setInterval(function() {
+                  runFixes();
+                  bcPollCount++;
+                  if (bcPollCount > 30) clearInterval(bcPollTimer);
+                }, 300);
+              } catch (e) {}
 
-              // Only release video memory if the user actually played the video
-              var userPlayedVideos = new WeakSet();
-              document.addEventListener('play', function(e) {
-                if (e.target && e.target.tagName === 'VIDEO') {
-                  userPlayedVideos.add(e.target);
-                }
-              }, true);
-              document.addEventListener('ended', function(e) {
-                var v = e.target;
-                if (v && v.tagName === 'VIDEO' && userPlayedVideos.has(v)) {
-                  var poster = v.poster;
-                  v.src = '';
-                  v.load();
-                  if (poster) v.poster = poster;
-                  userPlayedVideos.delete(v);
-                }
-              }, true);
+              try {
+                // Only release video memory if the user actually played the video
+                var userPlayedVideos = new WeakSet();
+                document.addEventListener('play', function(e) {
+                  if (e.target && e.target.tagName === 'VIDEO') {
+                    userPlayedVideos.add(e.target);
+                  }
+                }, true);
+                document.addEventListener('ended', function(e) {
+                  var v = e.target;
+                  if (v && v.tagName === 'VIDEO' && userPlayedVideos.has(v)) {
+                    var poster = v.poster;
+                    v.src = '';
+                    v.load();
+                    if (poster) v.poster = poster;
+                    userPlayedVideos.delete(v);
+                  }
+                }, true);
+              } catch (e) {}
             })();
             true;
           `}

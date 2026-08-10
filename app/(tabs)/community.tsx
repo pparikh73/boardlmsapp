@@ -92,52 +92,63 @@ export default function CommunityTab() {
         `}
         injectedJavaScript={`
           (function() {
-            // Base styles. overflow-x:hidden is intentionally NOT applied here on either
-            // platform — on this site it collapses the hero/header layout into a single
-            // collapsed column regardless of whether it's scoped to html, body, or both.
-            // directionalLockEnabled (native WebView prop) already prevents horizontal
-            // panning without touching the page's own CSS.
-            var style = document.createElement('style');
-            style.textContent = 'html, body { width: 100% !important; max-width: 100vw !important; }';
+            // Every independent fix below is wrapped in its own try/catch so one
+            // throwing can't silently abort the rest of the script.
+            try {
+              // Base styles. overflow-x:hidden is intentionally NOT applied here on
+              // either platform — on this site it collapses the hero/header layout into
+              // a single collapsed column regardless of whether it's scoped to html,
+              // body, or both. directionalLockEnabled (native WebView prop) already
+              // prevents horizontal panning without touching the page's own CSS.
+              var style = document.createElement('style');
+              style.textContent = 'html, body { width: 100% !important; max-width: 100vw !important; }';
+              document.head.appendChild(style);
+            } catch (e) {}
 
-            // Ensure iframes (Vimeo, Synthesia, etc.) receive the correct Referer header
-            var meta = document.querySelector('meta[name="referrer"]');
-            if (meta) {
-              meta.setAttribute('content', 'origin');
-            } else {
-              var refMeta = document.createElement('meta');
-              refMeta.name = 'referrer';
-              refMeta.content = 'origin';
-              document.head.appendChild(refMeta);
-            }
-            document.head.appendChild(style);
+            try {
+              // Ensure iframes (Vimeo, Synthesia, etc.) receive the correct Referer header
+              var meta = document.querySelector('meta[name="referrer"]');
+              if (meta) {
+                meta.setAttribute('content', 'origin');
+              } else {
+                var refMeta = document.createElement('meta');
+                refMeta.name = 'referrer';
+                refMeta.content = 'origin';
+                document.head.appendChild(refMeta);
+              }
+            } catch (e) {}
 
-            // Find flex containers that overflow the viewport and force them to wrap (2 per row).
-            // Only applies to row-direction containers (card grids) — forcing children to
-            // 50% width on a column-direction container (e.g. a vertically stacked hero
-            // text block) corrupts the layout into a collapsed single-character column.
-            function fixOverflowingFlex() {
-              var vw = window.innerWidth || document.documentElement.clientWidth;
-              document.querySelectorAll('*').forEach(function(el) {
-                if (el.scrollWidth > vw + 10) {
-                  var cs = window.getComputedStyle(el);
-                  var isRow = cs.flexDirection === 'row' || cs.flexDirection === 'row-reverse' || !cs.flexDirection;
-                  if ((cs.display === 'flex' || cs.display === 'inline-flex') && cs.flexWrap === 'nowrap' && isRow) {
-                    el.style.setProperty('flex-wrap', 'wrap', 'important');
-                    Array.from(el.children).forEach(function(child) {
-                      child.style.setProperty('flex', '0 0 50%', 'important');
-                      child.style.setProperty('max-width', '50%', 'important');
-                      child.style.setProperty('box-sizing', 'border-box', 'important');
-                    });
+            try {
+              // Find flex containers that overflow the viewport and force them to wrap
+              // (2 per row). Only applies to row-direction containers (card grids) —
+              // forcing children to 50% width on a column-direction container (e.g. a
+              // vertically stacked hero text block) corrupts the layout into a
+              // collapsed single-character column.
+              function fixOverflowingFlex() {
+                var vw = window.innerWidth || document.documentElement.clientWidth;
+                document.querySelectorAll('*').forEach(function(el) {
+                  if (el.scrollWidth > vw + 10) {
+                    var cs = window.getComputedStyle(el);
+                    var isRow = cs.flexDirection === 'row' || cs.flexDirection === 'row-reverse' || !cs.flexDirection;
+                    if ((cs.display === 'flex' || cs.display === 'inline-flex') && cs.flexWrap === 'nowrap' && isRow) {
+                      el.style.setProperty('flex-wrap', 'wrap', 'important');
+                      Array.from(el.children).forEach(function(child) {
+                        child.style.setProperty('flex', '0 0 50%', 'important');
+                        child.style.setProperty('max-width', '50%', 'important');
+                        child.style.setProperty('box-sizing', 'border-box', 'important');
+                      });
+                    }
                   }
-                }
-              });
-            }
+                });
+              }
+              fixOverflowingFlex();
+              var observer = new MutationObserver(fixOverflowingFlex);
+              observer.observe(document.body, { childList: true, subtree: true });
+            } catch (e) {}
 
-            fixOverflowingFlex();
-            var observer = new MutationObserver(fixOverflowingFlex);
-            observer.observe(document.body, { childList: true, subtree: true });
-            window.open = function(url) { if (url) window.location.href = url; return null; };
+            try {
+              window.open = function(url) { if (url) window.location.href = url; return null; };
+            } catch (e) {}
           })();
           true;
         `}
