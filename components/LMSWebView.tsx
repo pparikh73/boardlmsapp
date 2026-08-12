@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform } from 'react-native';
-import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform, Alert } from 'react-native';
+import { WebView, WebViewNavigation, WebViewRequest, WebViewMessageEvent } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { BRAND, WEBVIEW_USER_AGENT, ALLOWED_WEBVIEW_DOMAINS } from '../constants/skilljar';
 
@@ -35,6 +35,13 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
         );
       }
     }, [isFocused]);
+
+    function handleMessage(event: WebViewMessageEvent) {
+      const data = event.nativeEvent.data;
+      if (data.startsWith('DIAG::')) {
+        Alert.alert('Academy header diagnostic', data.slice('DIAG::'.length));
+      }
+    }
 
     function handleNavigationChange(nav: WebViewNavigation) {
       if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
@@ -92,6 +99,7 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           }}
           onNavigationStateChange={handleNavigationChange}
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
+          onMessage={handleMessage}
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
           overScrollMode="never"
@@ -228,15 +236,50 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 window.addEventListener('scroll', runFixes, { passive: true });
                 new MutationObserver(runFixes).observe(document.body, { childList: true, subtree: true });
                 // The site can re-apply fixed positioning via a style/class change with no
-                // DOM node insertion/removal, which neither observer above would catch —
-                // poll for the first several seconds as a safety net.
+                // DOM node insertion/removal, which neither observer above would catch, and
+                // exactly when it does this varies between loads (network/font/image timing)
+                // — poll fast for the first ~10s, then keep polling slowly for a full minute
+                // so a late re-fix still gets caught instead of racing a fixed-length window.
                 var bcPollCount = 0;
                 var bcPollTimer = setInterval(function() {
                   runFixes();
                   bcPollCount++;
-                  if (bcPollCount > 30) clearInterval(bcPollTimer);
+                  if (bcPollCount > 33) clearInterval(bcPollTimer);
                 }, 300);
+                var bcSlowPollCount = 0;
+                var bcSlowPollTimer = setInterval(function() {
+                  runFixes();
+                  bcSlowPollCount++;
+                  if (bcSlowPollCount > 25) clearInterval(bcSlowPollTimer);
+                }, 2000);
 
+                // TEMPORARY DIAGNOSTIC — scroll is now reported broken again on Academy
+                // despite unchanged mechanism (and Community, using the identical
+                // mechanism, is now reported working) — this pattern points to timing
+                // variability between loads rather than a deterministic bug. Report every
+                // fixed/sticky element found, regardless of filter match. Remove once
+                // resolved.
+                setTimeout(function() {
+                  var lines = [];
+                  var all = document.body.getElementsByTagName('*');
+                  var count = 0;
+                  for (var i = 0; i < all.length && count < 6; i++) {
+                    var el = all[i];
+                    var cs = window.getComputedStyle(el);
+                    if (cs.position !== 'fixed' && cs.position !== 'sticky') continue;
+                    var rect = el.getBoundingClientRect();
+                    count++;
+                    lines.push('<' + el.tagName + ' class="' + (el.className || '').toString().slice(0, 50) + '"> pos=' + cs.position +
+                      ' top=' + Math.round(rect.top) + ' w=' + Math.round(rect.width) + ' h=' + Math.round(rect.height) +
+                      ' vw=' + window.innerWidth);
+                  }
+                  if (count === 0) lines.push('no fixed/sticky elements found at all');
+                  var header = findStickyHeader();
+                  lines.push('findStickyHeader() result: ' + (header ? ('<' + header.tagName + '>') : 'null'));
+                  if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage('DIAG::' + lines.join('\\n'));
+                  }
+                }, 3000);
               } catch (e) {}
 
               try {
