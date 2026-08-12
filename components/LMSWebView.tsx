@@ -152,6 +152,10 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 if (${Platform.OS === 'ios'}) {
                   rules.push('body { overflow-x: hidden !important; }');
                 }
+                // The SCORM lesson player renders a black background while its own
+                // loading state runs, before it inserts the actual <video> element —
+                // give it a white background instead for a less jarring transition.
+                rules.push('.scorm-lesson-content, .scorm-lesson-content iframe, iframe { background-color: #ffffff !important; }');
                 style.innerHTML = rules.join('');
                 document.head.appendChild(style);
               } catch (e) {}
@@ -194,7 +198,7 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 // some sites style a <div> as the header instead of using a semantic <header>
                 // tag, which silently breaks tag-based selectors like 'header, nav'.
                 var bcKnownHeader = null;
-                function findStickyHeader() {
+                function findFixedHeader() {
                   if (bcKnownHeader && document.body.contains(bcKnownHeader)) {
                     var kcs = window.getComputedStyle(bcKnownHeader);
                     if (kcs.position === 'fixed' || kcs.position === 'sticky') return bcKnownHeader;
@@ -213,38 +217,29 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   return null;
                 }
 
-                function unstickHeader() {
-                  var header = findStickyHeader();
+                // Instead of fighting the site's own fixed-position header (a race we can
+                // never reliably win against its own JS re-applying it), reserve space for
+                // it below so content is never hidden behind it — the header can stay
+                // pinned exactly as the site intends.
+                var bcLastPad = -1;
+                function padForFixedHeader() {
+                  var header = findFixedHeader();
                   if (!header) return;
-                  header.style.setProperty('position', 'relative', 'important');
-                  header.style.setProperty('top', 'auto', 'important');
+                  var h = Math.ceil(header.getBoundingClientRect().height);
+                  if (h > 0 && h < 300 && h !== bcLastPad) {
+                    document.body.style.setProperty('padding-top', h + 'px', 'important');
+                    bcLastPad = h;
+                  }
                 }
-
-                function runFixes() {
-                  try { unstickHeader(); } catch (e) {}
-                }
-                runFixes();
-                // Scroll listener catches the site re-applying fixed positioning via inline
-                // style on scroll (a childList mutation observer alone wouldn't see that).
-                window.addEventListener('scroll', runFixes, { passive: true });
-                new MutationObserver(runFixes).observe(document.body, { childList: true, subtree: true });
-                // The site can re-apply fixed positioning via a style/class change with no
-                // DOM node insertion/removal, which neither observer above would catch, and
-                // exactly when it does this varies between loads (network/font/image timing)
-                // — poll fast for the first ~10s, then keep polling slowly for a full minute
-                // so a late re-fix still gets caught instead of racing a fixed-length window.
+                padForFixedHeader();
+                window.addEventListener('scroll', padForFixedHeader, { passive: true });
+                new MutationObserver(padForFixedHeader).observe(document.body, { childList: true, subtree: true });
                 var bcPollCount = 0;
                 var bcPollTimer = setInterval(function() {
-                  runFixes();
+                  padForFixedHeader();
                   bcPollCount++;
-                  if (bcPollCount > 33) clearInterval(bcPollTimer);
+                  if (bcPollCount > 20) clearInterval(bcPollTimer);
                 }, 300);
-                var bcSlowPollCount = 0;
-                var bcSlowPollTimer = setInterval(function() {
-                  runFixes();
-                  bcSlowPollCount++;
-                  if (bcSlowPollCount > 25) clearInterval(bcSlowPollTimer);
-                }, 2000);
               } catch (e) {}
 
               try {

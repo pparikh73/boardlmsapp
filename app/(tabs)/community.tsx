@@ -156,7 +156,7 @@ export default function CommunityTab() {
             try {
               // Find the site's pinned top bar by actual computed position, not tag name.
               var bcKnownHeader = null;
-              function findStickyHeader() {
+              function findFixedHeader() {
                 if (bcKnownHeader && document.body.contains(bcKnownHeader)) {
                   var kcs = window.getComputedStyle(bcKnownHeader);
                   if (kcs.position === 'fixed' || kcs.position === 'sticky') return bcKnownHeader;
@@ -174,30 +174,29 @@ export default function CommunityTab() {
                 }
                 return null;
               }
-              function unstickHeader() {
-                var header = findStickyHeader();
+
+              // Instead of fighting the site's own fixed-position header (a race we can
+              // never reliably win against its own JS re-applying it), reserve space for
+              // it below so content is never hidden behind it.
+              var bcLastPad = -1;
+              function padForFixedHeader() {
+                var header = findFixedHeader();
                 if (!header) return;
-                header.style.setProperty('position', 'relative', 'important');
-                header.style.setProperty('top', 'auto', 'important');
+                var h = Math.ceil(header.getBoundingClientRect().height);
+                if (h > 0 && h < 300 && h !== bcLastPad) {
+                  document.body.style.setProperty('padding-top', h + 'px', 'important');
+                  bcLastPad = h;
+                }
               }
-              unstickHeader();
-              window.addEventListener('scroll', unstickHeader, { passive: true });
-              new MutationObserver(unstickHeader).observe(document.body, { childList: true, subtree: true });
-              // Exactly when the site re-applies fixed positioning varies between loads
-              // (network/font/image timing) — poll fast for the first ~10s, then keep
-              // polling slowly for a full minute so a late re-fix still gets caught.
+              padForFixedHeader();
+              window.addEventListener('scroll', padForFixedHeader, { passive: true });
+              new MutationObserver(padForFixedHeader).observe(document.body, { childList: true, subtree: true });
               var bcPollCount = 0;
               var bcPollTimer = setInterval(function() {
-                unstickHeader();
+                padForFixedHeader();
                 bcPollCount++;
-                if (bcPollCount > 33) clearInterval(bcPollTimer);
+                if (bcPollCount > 20) clearInterval(bcPollTimer);
               }, 300);
-              var bcSlowPollCount = 0;
-              var bcSlowPollTimer = setInterval(function() {
-                unstickHeader();
-                bcSlowPollCount++;
-                if (bcSlowPollCount > 25) clearInterval(bcSlowPollTimer);
-              }, 2000);
             } catch (e) {}
           })();
           true;
