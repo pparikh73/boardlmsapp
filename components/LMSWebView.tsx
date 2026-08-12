@@ -257,76 +257,65 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   if (bcPollCount > 30) clearInterval(bcPollTimer);
                 }, 300);
 
-                // TEMPORARY DIAGNOSTIC — real-device data, since Appetize simulator
-                // results didn't match what the real device shows. Reports the actual
-                // state of the header and language select once (initial page), and the
-                // video/iframe state whenever a video first appears (injectedJavaScript
-                // only runs once per full page load, so this SPA site's later lesson
-                // pages need a live re-check, not a fixed delay). Remove once resolved.
-                function reportHeaderAndSelect() {
-                  var lines = [];
-                  try {
-                    var header = findStickyHeader();
-                    if (header) {
-                      var hcs = window.getComputedStyle(header);
-                      var hr = header.getBoundingClientRect();
-                      lines.push('header: <' + header.tagName + ' class="' + (header.className || '') + '"> position=' + hcs.position + ' top=' + Math.round(hr.top));
-                    } else {
-                      lines.push('header: none found');
-                    }
-                  } catch (e) { lines.push('header check threw: ' + e.message); }
-
-                  try {
-                    var found = false;
-                    var all = document.body.getElementsByTagName('*');
-                    for (var i = 0; i < all.length; i++) {
-                      var el = all[i];
-                      if (el.tagName === 'SELECT') {
-                        var sel = el.options && el.options[el.selectedIndex];
-                        if (sel && LANG_RE.test((sel.text || '').trim())) {
-                          found = true;
-                          var scs = window.getComputedStyle(el);
-                          var sr = el.getBoundingClientRect();
-                          lines.push('select: top=' + Math.round(sr.top) + ' w=' + Math.round(sr.width) +
-                            ' appearance=' + scs.webkitAppearance + ' color=' + scs.color +
-                            ' fillColor=' + scs.webkitTextFillColor +
-                            ' style="' + el.getAttribute('style') + '"');
-                        }
-                      }
-                    }
-                    if (!found) lines.push('select: no matching English select found');
-                  } catch (e) { lines.push('select check threw: ' + e.message); }
-
-                  lines.push('viewport w=' + window.innerWidth + ' ua=' + navigator.userAgent.slice(0, 60));
-                  if (window.ReactNativeWebView) {
-                    window.ReactNativeWebView.postMessage('DIAG::' + lines.join('\\n'));
+                // TEMPORARY DIAGNOSTIC — header unstick and language hiding are confirmed
+                // working on real device. Only the video playback issue remains. Watch
+                // for a video/iframe appearing, then monitor its loading lifecycle
+                // for several seconds instead of taking one snapshot — the previous
+                // attempt fired too early, before the player's JS finished setting up
+                // (its placeholder <video src> primer is a normal pattern, not a bug).
+                var bcMonitoring = false;
+                var bcEventLog = [];
+                function startMonitoring(video, iframe) {
+                  if (bcMonitoring) return;
+                  bcMonitoring = true;
+                  var t0 = new Date().getTime();
+                  function log(msg) {
+                    bcEventLog.push((new Date().getTime() - t0) + 'ms: ' + msg);
                   }
+                  if (video) {
+                    ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'playing', 'error', 'stalled', 'waiting', 'suspend', 'abort'].forEach(function(evt) {
+                      video.addEventListener(evt, function() {
+                        var err = video.error ? (' code=' + video.error.code) : '';
+                        log('video ' + evt + err + ' readyState=' + video.readyState);
+                      });
+                    });
+                  }
+                  if (iframe) {
+                    iframe.addEventListener('load', function() {
+                      log('iframe load, src=' + (iframe.src || '(still none)').slice(0, 80));
+                    });
+                    iframe.addEventListener('error', function() { log('iframe error'); });
+                  }
+                  setTimeout(function() {
+                    var lines = [];
+                    lines.push('monitored for 12s, events (' + bcEventLog.length + '):');
+                    lines = lines.concat(bcEventLog);
+                    if (video) {
+                      var err = video.error ? ('code=' + video.error.code + ' ' + video.error.message) : 'none';
+                      lines.push('final video: readyState=' + video.readyState + ' networkState=' + video.networkState +
+                        ' paused=' + video.paused + ' error=' + err + ' src=' + (video.currentSrc || video.src || '(none)').slice(0, 70));
+                    }
+                    if (iframe) {
+                      lines.push('final iframe: src=' + (iframe.src || '(none)').slice(0, 90) + ' sandbox=' + (iframe.getAttribute('sandbox') || '(none)') + ' allow=' + (iframe.getAttribute('allow') || '(none)'));
+                    }
+                    if (window.ReactNativeWebView) {
+                      window.ReactNativeWebView.postMessage('DIAG::' + lines.join('\\n'));
+                    }
+                  }, 12000);
                 }
-                setTimeout(reportHeaderAndSelect, 4000);
-
-                var bcVideoReported = false;
                 function checkForVideo() {
-                  if (bcVideoReported) return;
+                  if (bcMonitoring) return;
                   var videos = document.querySelectorAll('video');
                   var iframes = document.querySelectorAll('iframe');
                   if (videos.length === 0 && iframes.length === 0) return;
-                  bcVideoReported = true;
-                  var lines = [];
-                  lines.push('videos: ' + videos.length);
-                  videos.forEach(function(v, idx) {
-                    var err = v.error ? ('code=' + v.error.code + ' ' + v.error.message) : 'none';
-                    lines.push('  video[' + idx + '] readyState=' + v.readyState + ' networkState=' + v.networkState +
-                      ' paused=' + v.paused + ' error=' + err + ' src=' + (v.currentSrc || v.src || '(none)').slice(0, 60));
-                  });
-                  lines.push('iframes: ' + iframes.length);
-                  iframes.forEach(function(f, idx) {
+                  // Prefer the largest iframe (the actual player, not a hidden tracking one)
+                  var biggest = null, biggestArea = 0;
+                  iframes.forEach(function(f) {
                     var r = f.getBoundingClientRect();
-                    lines.push('  iframe[' + idx + '] w=' + Math.round(r.width) + ' h=' + Math.round(r.height) +
-                      ' src=' + (f.src || '(none)').slice(0, 80));
+                    var area = r.width * r.height;
+                    if (area > biggestArea) { biggestArea = area; biggest = f; }
                   });
-                  if (window.ReactNativeWebView) {
-                    window.ReactNativeWebView.postMessage('DIAG::' + lines.join('\\n'));
-                  }
+                  startMonitoring(videos[0] || null, biggest);
                 }
                 // Re-check whenever the page changes (SPA navigation to a lesson page)
                 // and periodically for the first ~30 seconds in case content loads slowly.
@@ -335,7 +324,7 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 var bcVideoPollTimer = setInterval(function() {
                   checkForVideo();
                   bcVideoPollCount++;
-                  if (bcVideoPollCount > 100 || bcVideoReported) clearInterval(bcVideoPollTimer);
+                  if (bcVideoPollCount > 100 || bcMonitoring) clearInterval(bcVideoPollTimer);
                 }, 300);
               } catch (e) {}
 
