@@ -108,17 +108,26 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           userAgent={WEBVIEW_USER_AGENT}
           onContentProcessDidTerminate={() => webViewRef.current?.reload()}
           onRenderProcessGone={() => webViewRef.current?.reload()}
+          // This script (and only this one) runs inside EVERY frame — including
+          // cross-origin iframes — because WKWebView injects it natively into each
+          // frame's own JS context rather than bridging it in from the parent. That's
+          // the only way to reach a cross-origin lesson-video vendor's <video> element
+          // at all: normal injectedJavaScript can't touch iframe.contentDocument once
+          // the iframe is a different origin, no matter what we try from the parent.
+          injectedJavaScriptBeforeContentLoadedForMainFrameOnly={false}
           injectedJavaScriptBeforeContentLoaded={`
             (function() {
-              var meta = document.querySelector('meta[name="viewport"]');
-              if (meta) {
-                meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0';
-              } else {
-                var m = document.createElement('meta');
-                m.name = 'viewport';
-                m.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0';
-                document.head.appendChild(m);
-              }
+              try {
+                var meta = document.querySelector('meta[name="viewport"]');
+                if (meta) {
+                  meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0';
+                } else {
+                  var m = document.createElement('meta');
+                  m.name = 'viewport';
+                  m.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0';
+                  document.head.appendChild(m);
+                }
+              } catch (e) {}
 
               // mediaPlaybackRequiresUserAction is false so lesson video players can call
               // .play() asynchronously after a tap — block any .play() call before the
@@ -135,6 +144,52 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   }
                   return originalPlay.apply(this, arguments);
                 };
+              } catch (e) {}
+
+              // Block native fullscreen video takeover from directly inside this frame's
+              // own context — works even when this frame is a cross-origin video vendor
+              // we could never reach via iframe.contentDocument from the parent.
+              try {
+                function markInline(v) {
+                  try {
+                    v.setAttribute('playsinline', '');
+                    v.setAttribute('webkit-playsinline', '');
+                  } catch (e) {}
+                }
+                document.addEventListener('DOMContentLoaded', function() {
+                  try { document.querySelectorAll('video').forEach(markInline); } catch (e) {}
+                });
+                new MutationObserver(function(muts) {
+                  muts.forEach(function(m) {
+                    if (!m.addedNodes) return;
+                    m.addedNodes.forEach(function(n) {
+                      if (!n) return;
+                      if (n.tagName === 'VIDEO') markInline(n);
+                      if (n.querySelectorAll) {
+                        try { n.querySelectorAll('video').forEach(markInline); } catch (e) {}
+                      }
+                    });
+                  });
+                }).observe(document, { childList: true, subtree: true });
+              } catch (e) {}
+              try {
+                if (window.HTMLVideoElement && window.HTMLVideoElement.prototype.webkitEnterFullscreen) {
+                  window.HTMLVideoElement.prototype.webkitEnterFullscreen = function() {};
+                }
+              } catch (e) {}
+              try {
+                if (window.HTMLVideoElement && window.HTMLVideoElement.prototype.webkitSetPresentationMode) {
+                  var originalSetMode = window.HTMLVideoElement.prototype.webkitSetPresentationMode;
+                  window.HTMLVideoElement.prototype.webkitSetPresentationMode = function(mode) {
+                    if (mode && mode !== 'inline') return;
+                    return originalSetMode.apply(this, arguments);
+                  };
+                }
+              } catch (e) {}
+              try {
+                if (window.HTMLMediaElement && window.HTMLMediaElement.prototype.requestFullscreen) {
+                  window.HTMLMediaElement.prototype.requestFullscreen = function() { return Promise.resolve(); };
+                }
               } catch (e) {}
             })();
             true;
