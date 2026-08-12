@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform, Alert } from 'react-native';
-import { WebView, WebViewNavigation, WebViewRequest, WebViewMessageEvent } from 'react-native-webview';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform } from 'react-native';
+import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { BRAND, WEBVIEW_USER_AGENT, ALLOWED_WEBVIEW_DOMAINS } from '../constants/skilljar';
 
@@ -35,13 +35,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
         );
       }
     }, [isFocused]);
-
-    function handleMessage(event: WebViewMessageEvent) {
-      const data = event.nativeEvent.data;
-      if (data.startsWith('DIAG::')) {
-        Alert.alert('Real-device diagnostic', data.slice('DIAG::'.length));
-      }
-    }
 
     function handleNavigationChange(nav: WebViewNavigation) {
       if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
@@ -99,7 +92,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           }}
           onNavigationStateChange={handleNavigationChange}
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
-          onMessage={handleMessage}
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
           overScrollMode="never"
@@ -230,34 +222,31 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   header.style.setProperty('top', 'auto', 'important');
                 }
 
-                // Hide language name text wherever it appears — searched independently of
-                // the sticky-header detection so a miss on one doesn't block the other.
+                // Hide the language <select>'s visible text only — NOT a broad search for
+                // any element containing the word "English", which also matched (and
+                // incorrectly hid) the legitimate language switcher inside the hamburger
+                // menu that users need to see and tap.
                 var LANG_RE = /^(English|Français|Deutsch|Español|Italiano|Português|简体中文|日本語|한국어)$/;
                 function hideLanguageText() {
                   var all = document.body.getElementsByTagName('*');
                   for (var i = 0; i < all.length; i++) {
                     var el = all[i];
+                    if (el.tagName !== 'SELECT') continue;
                     // A <select>'s visible text is its selected <option>, rendered natively
                     // by the browser — it isn't a separate DOM node display:none can hide.
                     // Hide the text color instead, keeping the control (and any icon)
                     // clickable.
-                    if (el.tagName === 'SELECT') {
-                      var selected = el.options && el.options[el.selectedIndex];
-                      if (selected && LANG_RE.test((selected.text || '').trim())) {
-                        // iOS renders <select> using the native OS picker chrome, which
-                        // ignores color/-webkit-text-fill-color entirely unless the native
-                        // appearance is disabled first — Android's WebView is web-styleable
-                        // by default so this wasn't needed there.
-                        el.style.setProperty('-webkit-appearance', 'none', 'important');
-                        el.style.setProperty('appearance', 'none', 'important');
-                        el.style.setProperty('color', 'transparent', 'important');
-                        el.style.setProperty('-webkit-text-fill-color', 'transparent', 'important');
-                        el.style.setProperty('text-shadow', 'none', 'important');
-                      }
-                      continue;
-                    }
-                    if (el.children.length === 0 && LANG_RE.test((el.textContent || '').trim())) {
-                      el.style.setProperty('display', 'none', 'important');
+                    var selected = el.options && el.options[el.selectedIndex];
+                    if (selected && LANG_RE.test((selected.text || '').trim())) {
+                      // iOS renders <select> using the native OS picker chrome, which
+                      // ignores color/-webkit-text-fill-color entirely unless the native
+                      // appearance is disabled first — Android's WebView is web-styleable
+                      // by default so this wasn't needed there.
+                      el.style.setProperty('-webkit-appearance', 'none', 'important');
+                      el.style.setProperty('appearance', 'none', 'important');
+                      el.style.setProperty('color', 'transparent', 'important');
+                      el.style.setProperty('-webkit-text-fill-color', 'transparent', 'important');
+                      el.style.setProperty('text-shadow', 'none', 'important');
                     }
                   }
                 }
@@ -281,113 +270,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   if (bcPollCount > 30) clearInterval(bcPollTimer);
                 }, 300);
 
-                // TEMPORARY DIAGNOSTIC — header unstick and language hiding are confirmed
-                // working on real device. Only the video playback issue remains. Watch
-                // for a video/iframe appearing, then monitor its loading lifecycle
-                // for several seconds instead of taking one snapshot — the previous
-                // attempt fired too early, before the player's JS finished setting up
-                // (its placeholder <video src> primer is a normal pattern, not a bug).
-                var bcMonitoring = false;
-                var bcEventLog = [];
-                function startMonitoring(topVideo, iframe) {
-                  if (bcMonitoring) return;
-                  bcMonitoring = true;
-                  var t0 = new Date().getTime();
-                  function log(msg) {
-                    bcEventLog.push((new Date().getTime() - t0) + 'ms: ' + msg);
-                  }
-                  function watchVideo(video, label) {
-                    ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'playing', 'error', 'stalled', 'waiting', 'suspend', 'abort'].forEach(function(evt) {
-                      video.addEventListener(evt, function() {
-                        var err = video.error ? (' code=' + video.error.code) : '';
-                        log(label + ' ' + evt + err + ' readyState=' + video.readyState);
-                      });
-                    });
-                  }
-                  if (topVideo) watchVideo(topVideo, 'top-video');
-
-                  // The video usually lives inside the (same-origin) SCORM/lesson iframe's
-                  // own document, not the top-level page — reach in and monitor that too.
-                  var innerVideo = null;
-                  var innerAccessError = null;
-                  function tryInner() {
-                    if (!iframe || innerVideo) return;
-                    try {
-                      var doc = iframe.contentDocument;
-                      if (!doc) return;
-                      var v = doc.querySelector('video');
-                      if (v) {
-                        innerVideo = v;
-                        watchVideo(v, 'inner-video');
-                        log('found inner video, readyState=' + v.readyState);
-                      }
-                    } catch (e) {
-                      innerAccessError = e.message;
-                    }
-                  }
-                  if (iframe) {
-                    iframe.addEventListener('load', function() {
-                      log('iframe load, src=' + (iframe.src || '(still none)').slice(0, 80));
-                      tryInner();
-                    });
-                    iframe.addEventListener('error', function() { log('iframe error'); });
-                    tryInner();
-                  }
-                  // Inner video may be added by the iframe's own JS after its load event
-                  var innerPollCount = 0;
-                  var innerPollTimer = setInterval(function() {
-                    tryInner();
-                    innerPollCount++;
-                    if (innerPollCount > 30 || innerVideo) clearInterval(innerPollTimer);
-                  }, 300);
-
-                  setTimeout(function() {
-                    var lines = [];
-                    lines.push('monitored for 12s, events (' + bcEventLog.length + '):');
-                    lines = lines.concat(bcEventLog);
-                    if (topVideo) {
-                      var err = topVideo.error ? ('code=' + topVideo.error.code + ' ' + topVideo.error.message) : 'none';
-                      lines.push('final top-video: readyState=' + topVideo.readyState + ' networkState=' + topVideo.networkState +
-                        ' paused=' + topVideo.paused + ' error=' + err);
-                    }
-                    if (innerVideo) {
-                      var ierr = innerVideo.error ? ('code=' + innerVideo.error.code + ' ' + innerVideo.error.message) : 'none';
-                      lines.push('final inner-video: readyState=' + innerVideo.readyState + ' networkState=' + innerVideo.networkState +
-                        ' paused=' + innerVideo.paused + ' error=' + ierr + ' src=' + (innerVideo.currentSrc || innerVideo.src || '(none)').slice(0, 70));
-                    } else {
-                      lines.push('inner-video: none found, contentDocument access error=' + (innerAccessError || '(none, doc was accessible but no <video> found)'));
-                    }
-                    if (iframe) {
-                      lines.push('iframe: src=' + (iframe.src || '(none)').slice(0, 90));
-                    }
-                    if (window.ReactNativeWebView) {
-                      window.ReactNativeWebView.postMessage('DIAG::' + lines.join('\\n'));
-                    }
-                  }, 12000);
-                }
-                function checkForVideo() {
-                  if (bcMonitoring) return;
-                  var videos = document.querySelectorAll('video');
-                  var iframes = document.querySelectorAll('iframe');
-                  if (videos.length === 0 && iframes.length === 0) return;
-                  // Prefer the largest iframe (the actual player, not a hidden tracking one)
-                  var biggest = null, biggestArea = 0;
-                  iframes.forEach(function(f) {
-                    var r = f.getBoundingClientRect();
-                    var area = r.width * r.height;
-                    if (area > biggestArea) { biggestArea = area; biggest = f; }
-                  });
-                  startMonitoring(videos[0] || null, biggest);
-                }
-                // Re-check whenever the page changes (SPA navigation to a lesson page)
-                // and periodically for the first ~30 seconds in case content loads slowly.
-                new MutationObserver(checkForVideo).observe(document.body, { childList: true, subtree: true });
-                var bcVideoPollCount = 0;
-                var bcVideoPollTimer = setInterval(function() {
-                  checkForVideo();
-                  bcVideoPollCount++;
-                  if (bcVideoPollCount > 100 || bcMonitoring) clearInterval(bcVideoPollTimer);
-                }, 300);
               } catch (e) {}
 
               try {
