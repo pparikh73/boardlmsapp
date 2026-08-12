@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform } from 'react-native';
-import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform, Alert } from 'react-native';
+import { WebView, WebViewNavigation, WebViewRequest, WebViewMessageEvent } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { BRAND, WEBVIEW_USER_AGENT, ALLOWED_WEBVIEW_DOMAINS } from '../constants/skilljar';
 
@@ -35,6 +35,13 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
         );
       }
     }, [isFocused]);
+
+    function handleMessage(event: WebViewMessageEvent) {
+      const data = event.nativeEvent.data;
+      if (data.startsWith('DIAG::')) {
+        Alert.alert('Black screen diagnostic', data.slice('DIAG::'.length));
+      }
+    }
 
     function handleNavigationChange(nav: WebViewNavigation) {
       if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
@@ -92,18 +99,17 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           }}
           onNavigationStateChange={handleNavigationChange}
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
+          onMessage={handleMessage}
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
           overScrollMode="never"
           directionalLockEnabled
           allowsInlineMediaPlayback
-          // true — this exact "video autoplay/black screen on load" bug has been fixed
-          // by reverting to true three separate times in this project's history
-          // (commits cd69ddb, 38f7cbf, 342c7af). Setting it to false does let some lesson
-          // videos play, but no combination with a touchstart-gate has ever avoided the
-          // black-screen regression, so this trades that specific video playback for
-          // overall stability.
-          mediaPlaybackRequiresUserAction={true}
+          // false — needed for the SCORM lesson video's async player to call .play()
+          // after a tap. This has historically caused a "black screen on load" bug
+          // (fixed by reverting to true 3 times before) — diagnosing what's actually
+          // rendering black below instead of guessing again.
+          mediaPlaybackRequiresUserAction={false}
           setSupportMultipleWindows={false}
           allowsBackForwardNavigationGestures
           userAgent={WEBVIEW_USER_AGENT}
@@ -121,6 +127,22 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 document.head.appendChild(m);
               }
 
+              // mediaPlaybackRequiresUserAction is false so lesson video players can call
+              // .play() asynchronously after a tap — block any .play() call before the
+              // user's first touch so this doesn't reintroduce autoplay on page load.
+              try {
+                var originalPlay = HTMLMediaElement.prototype.play;
+                var userInteracted = false;
+                document.addEventListener('touchstart', function() {
+                  userInteracted = true;
+                }, { once: true, capture: true });
+                HTMLMediaElement.prototype.play = function() {
+                  if (!userInteracted) {
+                    return Promise.resolve();
+                  }
+                  return originalPlay.apply(this, arguments);
+                };
+              } catch (e) {}
             })();
             true;
           `}
@@ -244,6 +266,49 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   }
                 }, true);
               } catch (e) {}
+
+              // TEMPORARY DIAGNOSTIC — find what's actually rendering as a black screen
+              // on page load. Checks at two points (1.5s and 3.5s) to catch it whether
+              // it's a <video> element or some other dark full-screen overlay. Remove
+              // once resolved.
+              function reportBlackScreen(label) {
+                try {
+                  var lines = [label + ':'];
+                  var vw = window.innerWidth, vh = window.innerHeight;
+                  document.querySelectorAll('video').forEach(function(v, idx) {
+                    var r = v.getBoundingClientRect();
+                    var cs = window.getComputedStyle(v);
+                    lines.push('video[' + idx + '] w=' + Math.round(r.width) + ' h=' + Math.round(r.height) +
+                      ' bg=' + cs.backgroundColor + ' autoplay=' + v.autoplay + ' poster=' + (v.poster ? 'yes' : 'no') +
+                      ' readyState=' + v.readyState + ' paused=' + v.paused +
+                      ' src=' + (v.currentSrc || v.src || '(none)').slice(0, 50));
+                  });
+                  // Any large element with a dark background covering most of the viewport
+                  var all = document.body.getElementsByTagName('*');
+                  var darkCount = 0;
+                  for (var i = 0; i < all.length && darkCount < 5; i++) {
+                    var el = all[i];
+                    var r = el.getBoundingClientRect();
+                    if (r.width < vw * 0.6 || r.height < vh * 0.4) continue;
+                    var cs = window.getComputedStyle(el);
+                    var m = cs.backgroundColor.match(/rgba?\\(([0-9]+), ([0-9]+), ([0-9]+)/);
+                    if (!m) continue;
+                    var rr = parseInt(m[1]), gg = parseInt(m[2]), bb = parseInt(m[3]);
+                    if (rr < 40 && gg < 40 && bb < 40) {
+                      darkCount++;
+                      lines.push('dark-el <' + el.tagName + ' class="' + (el.className || '').toString().slice(0, 40) + '"> ' +
+                        'w=' + Math.round(r.width) + ' h=' + Math.round(r.height) + ' top=' + Math.round(r.top) +
+                        ' bg=' + cs.backgroundColor + ' zIndex=' + cs.zIndex + ' position=' + cs.position);
+                    }
+                  }
+                  if (darkCount === 0) lines.push('no large dark elements found');
+                  if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage('DIAG::' + lines.join('\\n'));
+                  }
+                } catch (e) {}
+              }
+              setTimeout(function() { reportBlackScreen('at 1.5s'); }, 1500);
+              setTimeout(function() { reportBlackScreen('at 3.5s'); }, 3500);
             })();
             true;
           `}
