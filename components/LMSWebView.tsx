@@ -259,9 +259,11 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
 
                 // TEMPORARY DIAGNOSTIC — real-device data, since Appetize simulator
                 // results didn't match what the real device shows. Reports the actual
-                // state of the header and language select after our fixes run. Remove
-                // once resolved.
-                setTimeout(function() {
+                // state of the header and language select once (initial page), and the
+                // video/iframe state whenever a video first appears (injectedJavaScript
+                // only runs once per full page load, so this SPA site's later lesson
+                // pages need a live re-check, not a fixed delay). Remove once resolved.
+                function reportHeaderAndSelect() {
                   var lines = [];
                   try {
                     var header = findStickyHeader();
@@ -296,11 +298,45 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   } catch (e) { lines.push('select check threw: ' + e.message); }
 
                   lines.push('viewport w=' + window.innerWidth + ' ua=' + navigator.userAgent.slice(0, 60));
-
                   if (window.ReactNativeWebView) {
                     window.ReactNativeWebView.postMessage('DIAG::' + lines.join('\\n'));
                   }
-                }, 4000);
+                }
+                setTimeout(reportHeaderAndSelect, 4000);
+
+                var bcVideoReported = false;
+                function checkForVideo() {
+                  if (bcVideoReported) return;
+                  var videos = document.querySelectorAll('video');
+                  var iframes = document.querySelectorAll('iframe');
+                  if (videos.length === 0 && iframes.length === 0) return;
+                  bcVideoReported = true;
+                  var lines = [];
+                  lines.push('videos: ' + videos.length);
+                  videos.forEach(function(v, idx) {
+                    var err = v.error ? ('code=' + v.error.code + ' ' + v.error.message) : 'none';
+                    lines.push('  video[' + idx + '] readyState=' + v.readyState + ' networkState=' + v.networkState +
+                      ' paused=' + v.paused + ' error=' + err + ' src=' + (v.currentSrc || v.src || '(none)').slice(0, 60));
+                  });
+                  lines.push('iframes: ' + iframes.length);
+                  iframes.forEach(function(f, idx) {
+                    var r = f.getBoundingClientRect();
+                    lines.push('  iframe[' + idx + '] w=' + Math.round(r.width) + ' h=' + Math.round(r.height) +
+                      ' src=' + (f.src || '(none)').slice(0, 80));
+                  });
+                  if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage('DIAG::' + lines.join('\\n'));
+                  }
+                }
+                // Re-check whenever the page changes (SPA navigation to a lesson page)
+                // and periodically for the first ~30 seconds in case content loads slowly.
+                new MutationObserver(checkForVideo).observe(document.body, { childList: true, subtree: true });
+                var bcVideoPollCount = 0;
+                var bcVideoPollTimer = setInterval(function() {
+                  checkForVideo();
+                  bcVideoPollCount++;
+                  if (bcVideoPollCount > 100 || bcVideoReported) clearInterval(bcVideoPollTimer);
+                }, 300);
               } catch (e) {}
 
               try {
