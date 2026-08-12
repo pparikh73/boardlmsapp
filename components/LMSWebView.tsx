@@ -265,38 +265,76 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 // (its placeholder <video src> primer is a normal pattern, not a bug).
                 var bcMonitoring = false;
                 var bcEventLog = [];
-                function startMonitoring(video, iframe) {
+                function startMonitoring(topVideo, iframe) {
                   if (bcMonitoring) return;
                   bcMonitoring = true;
                   var t0 = new Date().getTime();
                   function log(msg) {
                     bcEventLog.push((new Date().getTime() - t0) + 'ms: ' + msg);
                   }
-                  if (video) {
+                  function watchVideo(video, label) {
                     ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'playing', 'error', 'stalled', 'waiting', 'suspend', 'abort'].forEach(function(evt) {
                       video.addEventListener(evt, function() {
                         var err = video.error ? (' code=' + video.error.code) : '';
-                        log('video ' + evt + err + ' readyState=' + video.readyState);
+                        log(label + ' ' + evt + err + ' readyState=' + video.readyState);
                       });
                     });
+                  }
+                  if (topVideo) watchVideo(topVideo, 'top-video');
+
+                  // The video usually lives inside the (same-origin) SCORM/lesson iframe's
+                  // own document, not the top-level page — reach in and monitor that too.
+                  var innerVideo = null;
+                  var innerAccessError = null;
+                  function tryInner() {
+                    if (!iframe || innerVideo) return;
+                    try {
+                      var doc = iframe.contentDocument;
+                      if (!doc) return;
+                      var v = doc.querySelector('video');
+                      if (v) {
+                        innerVideo = v;
+                        watchVideo(v, 'inner-video');
+                        log('found inner video, readyState=' + v.readyState);
+                      }
+                    } catch (e) {
+                      innerAccessError = e.message;
+                    }
                   }
                   if (iframe) {
                     iframe.addEventListener('load', function() {
                       log('iframe load, src=' + (iframe.src || '(still none)').slice(0, 80));
+                      tryInner();
                     });
                     iframe.addEventListener('error', function() { log('iframe error'); });
+                    tryInner();
                   }
+                  // Inner video may be added by the iframe's own JS after its load event
+                  var innerPollCount = 0;
+                  var innerPollTimer = setInterval(function() {
+                    tryInner();
+                    innerPollCount++;
+                    if (innerPollCount > 30 || innerVideo) clearInterval(innerPollTimer);
+                  }, 300);
+
                   setTimeout(function() {
                     var lines = [];
                     lines.push('monitored for 12s, events (' + bcEventLog.length + '):');
                     lines = lines.concat(bcEventLog);
-                    if (video) {
-                      var err = video.error ? ('code=' + video.error.code + ' ' + video.error.message) : 'none';
-                      lines.push('final video: readyState=' + video.readyState + ' networkState=' + video.networkState +
-                        ' paused=' + video.paused + ' error=' + err + ' src=' + (video.currentSrc || video.src || '(none)').slice(0, 70));
+                    if (topVideo) {
+                      var err = topVideo.error ? ('code=' + topVideo.error.code + ' ' + topVideo.error.message) : 'none';
+                      lines.push('final top-video: readyState=' + topVideo.readyState + ' networkState=' + topVideo.networkState +
+                        ' paused=' + topVideo.paused + ' error=' + err);
+                    }
+                    if (innerVideo) {
+                      var ierr = innerVideo.error ? ('code=' + innerVideo.error.code + ' ' + innerVideo.error.message) : 'none';
+                      lines.push('final inner-video: readyState=' + innerVideo.readyState + ' networkState=' + innerVideo.networkState +
+                        ' paused=' + innerVideo.paused + ' error=' + ierr + ' src=' + (innerVideo.currentSrc || innerVideo.src || '(none)').slice(0, 70));
+                    } else {
+                      lines.push('inner-video: none found, contentDocument access error=' + (innerAccessError || '(none, doc was accessible but no <video> found)'));
                     }
                     if (iframe) {
-                      lines.push('final iframe: src=' + (iframe.src || '(none)').slice(0, 90) + ' sandbox=' + (iframe.getAttribute('sandbox') || '(none)') + ' allow=' + (iframe.getAttribute('allow') || '(none)'));
+                      lines.push('iframe: src=' + (iframe.src || '(none)').slice(0, 90));
                     }
                     if (window.ReactNativeWebView) {
                       window.ReactNativeWebView.postMessage('DIAG::' + lines.join('\\n'));

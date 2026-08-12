@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, StatusBar, Linking, Alert } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, StatusBar, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { WebView, WebViewRequest, WebViewMessageEvent } from 'react-native-webview';
+import { WebView, WebViewRequest } from 'react-native-webview';
 import { useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COMMUNITY_BASE_URL, BRAND, WEBVIEW_USER_AGENT, ALLOWED_WEBVIEW_DOMAINS } from '../../constants/skilljar';
@@ -19,13 +19,6 @@ export default function CommunityTab() {
     });
     return unsubscribe;
   }, [navigation]);
-
-  function handleMessage(event: WebViewMessageEvent) {
-    const data = event.nativeEvent.data;
-    if (data.startsWith('DIAG::')) {
-      Alert.alert('Community header diagnostic', data.slice('DIAG::'.length));
-    }
-  }
 
   function handleShouldStartLoadWithRequest(request: WebViewRequest): boolean {
     const { url } = request;
@@ -75,7 +68,6 @@ export default function CommunityTab() {
         source={{ uri: COMMUNITY_BASE_URL }}
         style={{ flex: 1 }}
         onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
-        onMessage={handleMessage}
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
         overScrollMode="never"
@@ -191,29 +183,6 @@ export default function CommunityTab() {
               unstickHeader();
               window.addEventListener('scroll', unstickHeader, { passive: true });
               new MutationObserver(unstickHeader).observe(document.body, { childList: true, subtree: true });
-
-              // TEMPORARY DIAGNOSTIC — report every fixed/sticky element regardless of
-              // whether it passes the top/width/height filter, since findStickyHeader()
-              // never matches anything on this page. Remove once resolved.
-              setTimeout(function() {
-                var lines = [];
-                var all = document.body.getElementsByTagName('*');
-                var count = 0;
-                for (var i = 0; i < all.length && count < 8; i++) {
-                  var el = all[i];
-                  var cs = window.getComputedStyle(el);
-                  if (cs.position !== 'fixed' && cs.position !== 'sticky') continue;
-                  var rect = el.getBoundingClientRect();
-                  count++;
-                  lines.push('<' + el.tagName + ' class="' + (el.className || '').toString().slice(0, 40) + '"> pos=' + cs.position +
-                    ' top=' + Math.round(rect.top) + ' w=' + Math.round(rect.width) + ' h=' + Math.round(rect.height) +
-                    ' vw=' + window.innerWidth);
-                }
-                if (count === 0) lines.push('no fixed/sticky elements found at all');
-                if (window.ReactNativeWebView) {
-                  window.ReactNativeWebView.postMessage('DIAG::' + lines.join('\\n'));
-                }
-              }, 3000);
             } catch (e) {}
           })();
           true;
