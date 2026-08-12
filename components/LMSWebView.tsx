@@ -220,9 +220,32 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                     }
                   } catch (e) {}
                 }
+                // The <iframe> tag itself lives in OUR document, so its attributes are
+                // always reachable even when its content is cross-origin (e.g. a
+                // third-party video vendor's player) and totally opaque to us otherwise.
+                // Without an explicit allowfullscreen/allow="fullscreen" permission, the
+                // browser's own Permissions Policy blocks that frame's Fullscreen API
+                // calls outright — no reach into the iframe's JS required at all.
+                function stripIframeFullscreenPermission(f) {
+                  try {
+                    f.removeAttribute('allowfullscreen');
+                    f.removeAttribute('webkitallowfullscreen');
+                    f.removeAttribute('mozallowfullscreen');
+                    var allow = f.getAttribute('allow');
+                    if (allow) {
+                      var filtered = allow
+                        .split(';')
+                        .map(function(p) { return p.trim(); })
+                        .filter(function(p) { return p && p.toLowerCase().indexOf('fullscreen') === -1; })
+                        .join('; ');
+                      f.setAttribute('allow', filtered);
+                    }
+                  } catch (e) {}
+                }
                 function fixVideosEverywhere() {
                   fixVideoDoc(document, window);
                   document.querySelectorAll('iframe').forEach(function(f) {
+                    stripIframeFullscreenPermission(f);
                     try {
                       if (f.contentDocument && f.contentWindow) {
                         fixVideoDoc(f.contentDocument, f.contentWindow);
@@ -231,6 +254,7 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                     if (!f._bcLoadHooked) {
                       f._bcLoadHooked = true;
                       f.addEventListener('load', function() {
+                        stripIframeFullscreenPermission(f);
                         try {
                           if (f.contentDocument && f.contentWindow) {
                             fixVideoDoc(f.contentDocument, f.contentWindow);
@@ -242,7 +266,14 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 }
                 fixVideosEverywhere();
                 var plObserver = new MutationObserver(fixVideosEverywhere);
-                plObserver.observe(document.body, { childList: true, subtree: true });
+                plObserver.observe(document.body, {
+                  childList: true,
+                  subtree: true,
+                  // Catch the site re-adding allowfullscreen after we strip it, not just
+                  // new iframes being inserted.
+                  attributes: true,
+                  attributeFilter: ['allowfullscreen', 'allow', 'webkitallowfullscreen', 'mozallowfullscreen'],
+                });
                 // Iframe content can populate asynchronously after its own load event —
                 // poll briefly to catch a video inserted shortly after.
                 var bcVideoFixPollCount = 0;
