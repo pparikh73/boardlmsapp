@@ -184,11 +184,34 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                     doc.querySelectorAll('video').forEach(function(v) {
                       v.setAttribute('playsinline', '');
                       v.setAttribute('webkit-playsinline', '');
+                      // Reactive catch: some players use webkitSetPresentationMode
+                      // directly (a separate API from webkitEnterFullscreen) to enter
+                      // fullscreen — this fires the instant presentation mode changes,
+                      // regardless of which API triggered it, and reverses it immediately.
+                      if (!v._bcPresHooked) {
+                        v._bcPresHooked = true;
+                        v.addEventListener('webkitpresentationmodechanged', function() {
+                          try {
+                            if (v.webkitPresentationMode && v.webkitPresentationMode !== 'inline' && v.webkitSetPresentationMode) {
+                              v.webkitSetPresentationMode('inline');
+                            }
+                          } catch (e) {}
+                        });
+                      }
                     });
                   } catch (e) {}
                   try {
                     if (win && win.HTMLVideoElement && win.HTMLVideoElement.prototype.webkitEnterFullscreen) {
                       win.HTMLVideoElement.prototype.webkitEnterFullscreen = function() {};
+                    }
+                  } catch (e) {}
+                  try {
+                    if (win && win.HTMLVideoElement && win.HTMLVideoElement.prototype.webkitSetPresentationMode) {
+                      var originalSetMode = win.HTMLVideoElement.prototype.webkitSetPresentationMode;
+                      win.HTMLVideoElement.prototype.webkitSetPresentationMode = function(mode) {
+                        if (mode && mode !== 'inline') return;
+                        return originalSetMode.apply(this, arguments);
+                      };
                     }
                   } catch (e) {}
                   try {
