@@ -105,7 +105,14 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           overScrollMode="never"
           directionalLockEnabled
           allowsInlineMediaPlayback
-          mediaPlaybackRequiresUserAction={true}
+          // false lets the lesson video player's own async JS call .play() after a tap
+          // (Community already uses false for the same reason — Vimeo/Synthesia players
+          // often don't call .play() synchronously within the tap handler, and iOS's
+          // stricter "true" mode silently blocks any .play() outside that exact window,
+          // which is why the SCORM lesson video never advanced past readyState 0).
+          // injectedJavaScriptBeforeContentLoaded below blocks any .play() call before
+          // the user's first touch, so this doesn't reintroduce autoplay on page load.
+          mediaPlaybackRequiresUserAction={false}
           setSupportMultipleWindows={false}
           allowsBackForwardNavigationGestures
           userAgent={WEBVIEW_USER_AGENT}
@@ -122,6 +129,23 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 m.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0';
                 document.head.appendChild(m);
               }
+
+              // mediaPlaybackRequiresUserAction is now false so lesson video players can
+              // call .play() asynchronously after a tap — block any .play() call before
+              // the user's first touch so this doesn't reintroduce autoplay on page load.
+              try {
+                var originalPlay = HTMLMediaElement.prototype.play;
+                var userInteracted = false;
+                document.addEventListener('touchstart', function() {
+                  userInteracted = true;
+                }, { once: true, capture: true });
+                HTMLMediaElement.prototype.play = function() {
+                  if (!userInteracted) {
+                    return Promise.resolve();
+                  }
+                  return originalPlay.apply(this, arguments);
+                };
+              } catch (e) {}
             })();
             true;
           `}
