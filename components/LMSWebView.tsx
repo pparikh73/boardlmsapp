@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform, Alert } from 'react-native';
-import { WebView, WebViewNavigation, WebViewRequest, WebViewMessageEvent } from 'react-native-webview';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform } from 'react-native';
+import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { BRAND, WEBVIEW_USER_AGENT, ALLOWED_WEBVIEW_DOMAINS } from '../constants/skilljar';
 
@@ -35,13 +35,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
         );
       }
     }, [isFocused]);
-
-    function handleMessage(event: WebViewMessageEvent) {
-      const data = event.nativeEvent.data;
-      if (data.startsWith('DIAG::')) {
-        Alert.alert('Black screen diagnostic', data.slice('DIAG::'.length));
-      }
-    }
 
     function handleNavigationChange(nav: WebViewNavigation) {
       if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
@@ -99,7 +92,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           }}
           onNavigationStateChange={handleNavigationChange}
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
-          onMessage={handleMessage}
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
           overScrollMode="never"
@@ -267,59 +259,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 }, true);
               } catch (e) {}
 
-              // TEMPORARY DIAGNOSTIC — find what's actually rendering as a black screen
-              // on page load. Uses elementFromPoint at several screen coordinates to find
-              // what's really painted there (previous attempt scanned background-color
-              // without checking alpha, so it flagged fully transparent elements as if
-              // they were opaque black). Also reaches into same-origin iframes, since the
-              // real video content lives there, not the top-level document. Remove once
-              // resolved.
-              function describeAt(x, y) {
-                var el = document.elementFromPoint(x, y);
-                if (!el) return 'x=' + x + ',y=' + y + ': nothing';
-                var cs = window.getComputedStyle(el);
-                var path = [];
-                var cur = el;
-                for (var d = 0; d < 3 && cur; d++) {
-                  path.push('<' + cur.tagName + (cur.className ? '.' + (cur.className.toString().split(' ')[0]) : '') + '>');
-                  cur = cur.parentElement;
-                }
-                return 'x=' + x + ',y=' + y + ': ' + path.join('<') + ' bg=' + cs.backgroundColor +
-                  ' opacity=' + cs.opacity + ' visibility=' + cs.visibility;
-              }
-              function reportBlackScreen(label) {
-                try {
-                  var lines = [label + ':'];
-                  var vw = window.innerWidth, vh = window.innerHeight;
-                  [[vw/2, vh/3], [vw/2, vh/2], [vw/2, vh*0.7]].forEach(function(pt) {
-                    lines.push(describeAt(Math.round(pt[0]), Math.round(pt[1])));
-                  });
-                  document.querySelectorAll('video').forEach(function(v, idx) {
-                    var r = v.getBoundingClientRect();
-                    lines.push('top-video[' + idx + '] w=' + Math.round(r.width) + ' h=' + Math.round(r.height) +
-                      ' readyState=' + v.readyState + ' paused=' + v.paused);
-                  });
-                  var iframeCount = 0;
-                  document.querySelectorAll('iframe').forEach(function(f, idx) {
-                    if (iframeCount > 3) return;
-                    iframeCount++;
-                    var r = f.getBoundingClientRect();
-                    var accessible = false, innerVideoCount = 0;
-                    try {
-                      var doc = f.contentDocument;
-                      accessible = !!doc;
-                      if (doc) innerVideoCount = doc.querySelectorAll('video').length;
-                    } catch (e) {}
-                    lines.push('iframe[' + idx + '] w=' + Math.round(r.width) + ' h=' + Math.round(r.height) +
-                      ' src=' + (f.src || '(none)').slice(0, 60) + ' accessible=' + accessible + ' innerVideos=' + innerVideoCount);
-                  });
-                  if (window.ReactNativeWebView) {
-                    window.ReactNativeWebView.postMessage('DIAG::' + lines.join('\\n'));
-                  }
-                } catch (e) {}
-              }
-              setTimeout(function() { reportBlackScreen('at 1.5s'); }, 1500);
-              setTimeout(function() { reportBlackScreen('at 3.5s'); }, 3500);
             })();
             true;
           `}
