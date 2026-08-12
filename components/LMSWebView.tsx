@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform, Alert } from 'react-native';
-import { WebView, WebViewNavigation, WebViewRequest, WebViewMessageEvent } from 'react-native-webview';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform } from 'react-native';
+import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { BRAND, WEBVIEW_USER_AGENT, ALLOWED_WEBVIEW_DOMAINS } from '../constants/skilljar';
 
@@ -35,13 +35,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
         );
       }
     }, [isFocused]);
-
-    function handleMessage(event: WebViewMessageEvent) {
-      const data = event.nativeEvent.data;
-      if (data.startsWith('DIAG::')) {
-        Alert.alert('Academy header diagnostic', data.slice('DIAG::'.length));
-      }
-    }
 
     function handleNavigationChange(nav: WebViewNavigation) {
       if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
@@ -99,16 +92,16 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           }}
           onNavigationStateChange={handleNavigationChange}
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
-          onMessage={handleMessage}
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
           overScrollMode="never"
           directionalLockEnabled
           allowsInlineMediaPlayback
           // false — needed for the SCORM lesson video's async player to call .play()
-          // after a tap. This has historically caused a "black screen on load" bug
-          // (fixed by reverting to true 3 times before) — diagnosing what's actually
-          // rendering black below instead of guessing again.
+          // after a tap. Confirmed via diagnostic that the "black screen on load" this
+          // previously caused is the SCORM player's own loading state (rendering black
+          // before it inserts its <video> element) — content behavior, not something
+          // this setting controls.
           mediaPlaybackRequiresUserAction={false}
           setSupportMultipleWindows={false}
           allowsBackForwardNavigationGestures
@@ -252,34 +245,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   bcSlowPollCount++;
                   if (bcSlowPollCount > 25) clearInterval(bcSlowPollTimer);
                 }, 2000);
-
-                // TEMPORARY DIAGNOSTIC — scroll is now reported broken again on Academy
-                // despite unchanged mechanism (and Community, using the identical
-                // mechanism, is now reported working) — this pattern points to timing
-                // variability between loads rather than a deterministic bug. Report every
-                // fixed/sticky element found, regardless of filter match. Remove once
-                // resolved.
-                setTimeout(function() {
-                  var lines = [];
-                  var all = document.body.getElementsByTagName('*');
-                  var count = 0;
-                  for (var i = 0; i < all.length && count < 6; i++) {
-                    var el = all[i];
-                    var cs = window.getComputedStyle(el);
-                    if (cs.position !== 'fixed' && cs.position !== 'sticky') continue;
-                    var rect = el.getBoundingClientRect();
-                    count++;
-                    lines.push('<' + el.tagName + ' class="' + (el.className || '').toString().slice(0, 50) + '"> pos=' + cs.position +
-                      ' top=' + Math.round(rect.top) + ' w=' + Math.round(rect.width) + ' h=' + Math.round(rect.height) +
-                      ' vw=' + window.innerWidth);
-                  }
-                  if (count === 0) lines.push('no fixed/sticky elements found at all');
-                  var header = findStickyHeader();
-                  lines.push('findStickyHeader() result: ' + (header ? ('<' + header.tagName + '>') : 'null'));
-                  if (window.ReactNativeWebView) {
-                    window.ReactNativeWebView.postMessage('DIAG::' + lines.join('\\n'));
-                  }
-                }, 3000);
               } catch (e) {}
 
               try {
