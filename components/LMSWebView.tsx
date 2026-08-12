@@ -174,16 +174,60 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
               } catch (e) {}
 
               try {
-                // Force inline playback on all videos (prevents iOS full-screen takeover)
-                function addPlaysinline() {
-                  document.querySelectorAll('video').forEach(function(v) {
-                    v.setAttribute('playsinline', '');
-                    v.setAttribute('webkit-playsinline', '');
+                // Force inline playback and block native fullscreen takeover — applied to
+                // both the top-level document AND same-origin iframes (e.g. the SCORM
+                // lesson player), since a video inside an iframe was never being reached
+                // before, letting iOS grab the whole screen with its native video player
+                // the moment that video started playing.
+                function fixVideoDoc(doc, win) {
+                  try {
+                    doc.querySelectorAll('video').forEach(function(v) {
+                      v.setAttribute('playsinline', '');
+                      v.setAttribute('webkit-playsinline', '');
+                    });
+                  } catch (e) {}
+                  try {
+                    if (win && win.HTMLVideoElement && win.HTMLVideoElement.prototype.webkitEnterFullscreen) {
+                      win.HTMLVideoElement.prototype.webkitEnterFullscreen = function() {};
+                    }
+                  } catch (e) {}
+                  try {
+                    if (win && win.HTMLMediaElement && win.HTMLMediaElement.prototype.requestFullscreen) {
+                      win.HTMLMediaElement.prototype.requestFullscreen = function() { return Promise.resolve(); };
+                    }
+                  } catch (e) {}
+                }
+                function fixVideosEverywhere() {
+                  fixVideoDoc(document, window);
+                  document.querySelectorAll('iframe').forEach(function(f) {
+                    try {
+                      if (f.contentDocument && f.contentWindow) {
+                        fixVideoDoc(f.contentDocument, f.contentWindow);
+                      }
+                    } catch (e) {}
+                    if (!f._bcLoadHooked) {
+                      f._bcLoadHooked = true;
+                      f.addEventListener('load', function() {
+                        try {
+                          if (f.contentDocument && f.contentWindow) {
+                            fixVideoDoc(f.contentDocument, f.contentWindow);
+                          }
+                        } catch (e) {}
+                      });
+                    }
                   });
                 }
-                addPlaysinline();
-                var plObserver = new MutationObserver(addPlaysinline);
+                fixVideosEverywhere();
+                var plObserver = new MutationObserver(fixVideosEverywhere);
                 plObserver.observe(document.body, { childList: true, subtree: true });
+                // Iframe content can populate asynchronously after its own load event —
+                // poll briefly to catch a video inserted shortly after.
+                var bcVideoFixPollCount = 0;
+                var bcVideoFixPollTimer = setInterval(function() {
+                  fixVideosEverywhere();
+                  bcVideoFixPollCount++;
+                  if (bcVideoFixPollCount > 20) clearInterval(bcVideoFixPollTimer);
+                }, 300);
               } catch (e) {}
 
               try {
