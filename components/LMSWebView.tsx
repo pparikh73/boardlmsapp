@@ -268,40 +268,51 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
               } catch (e) {}
 
               // TEMPORARY DIAGNOSTIC — find what's actually rendering as a black screen
-              // on page load. Checks at two points (1.5s and 3.5s) to catch it whether
-              // it's a <video> element or some other dark full-screen overlay. Remove
-              // once resolved.
+              // on page load. Uses elementFromPoint at several screen coordinates to find
+              // what's really painted there (previous attempt scanned background-color
+              // without checking alpha, so it flagged fully transparent elements as if
+              // they were opaque black). Also reaches into same-origin iframes, since the
+              // real video content lives there, not the top-level document. Remove once
+              // resolved.
+              function describeAt(x, y) {
+                var el = document.elementFromPoint(x, y);
+                if (!el) return 'x=' + x + ',y=' + y + ': nothing';
+                var cs = window.getComputedStyle(el);
+                var path = [];
+                var cur = el;
+                for (var d = 0; d < 3 && cur; d++) {
+                  path.push('<' + cur.tagName + (cur.className ? '.' + (cur.className.toString().split(' ')[0]) : '') + '>');
+                  cur = cur.parentElement;
+                }
+                return 'x=' + x + ',y=' + y + ': ' + path.join('<') + ' bg=' + cs.backgroundColor +
+                  ' opacity=' + cs.opacity + ' visibility=' + cs.visibility;
+              }
               function reportBlackScreen(label) {
                 try {
                   var lines = [label + ':'];
                   var vw = window.innerWidth, vh = window.innerHeight;
+                  [[vw/2, vh/3], [vw/2, vh/2], [vw/2, vh*0.7]].forEach(function(pt) {
+                    lines.push(describeAt(Math.round(pt[0]), Math.round(pt[1])));
+                  });
                   document.querySelectorAll('video').forEach(function(v, idx) {
                     var r = v.getBoundingClientRect();
-                    var cs = window.getComputedStyle(v);
-                    lines.push('video[' + idx + '] w=' + Math.round(r.width) + ' h=' + Math.round(r.height) +
-                      ' bg=' + cs.backgroundColor + ' autoplay=' + v.autoplay + ' poster=' + (v.poster ? 'yes' : 'no') +
-                      ' readyState=' + v.readyState + ' paused=' + v.paused +
-                      ' src=' + (v.currentSrc || v.src || '(none)').slice(0, 50));
+                    lines.push('top-video[' + idx + '] w=' + Math.round(r.width) + ' h=' + Math.round(r.height) +
+                      ' readyState=' + v.readyState + ' paused=' + v.paused);
                   });
-                  // Any large element with a dark background covering most of the viewport
-                  var all = document.body.getElementsByTagName('*');
-                  var darkCount = 0;
-                  for (var i = 0; i < all.length && darkCount < 5; i++) {
-                    var el = all[i];
-                    var r = el.getBoundingClientRect();
-                    if (r.width < vw * 0.6 || r.height < vh * 0.4) continue;
-                    var cs = window.getComputedStyle(el);
-                    var m = cs.backgroundColor.match(/rgba?\\(([0-9]+), ([0-9]+), ([0-9]+)/);
-                    if (!m) continue;
-                    var rr = parseInt(m[1]), gg = parseInt(m[2]), bb = parseInt(m[3]);
-                    if (rr < 40 && gg < 40 && bb < 40) {
-                      darkCount++;
-                      lines.push('dark-el <' + el.tagName + ' class="' + (el.className || '').toString().slice(0, 40) + '"> ' +
-                        'w=' + Math.round(r.width) + ' h=' + Math.round(r.height) + ' top=' + Math.round(r.top) +
-                        ' bg=' + cs.backgroundColor + ' zIndex=' + cs.zIndex + ' position=' + cs.position);
-                    }
-                  }
-                  if (darkCount === 0) lines.push('no large dark elements found');
+                  var iframeCount = 0;
+                  document.querySelectorAll('iframe').forEach(function(f, idx) {
+                    if (iframeCount > 3) return;
+                    iframeCount++;
+                    var r = f.getBoundingClientRect();
+                    var accessible = false, innerVideoCount = 0;
+                    try {
+                      var doc = f.contentDocument;
+                      accessible = !!doc;
+                      if (doc) innerVideoCount = doc.querySelectorAll('video').length;
+                    } catch (e) {}
+                    lines.push('iframe[' + idx + '] w=' + Math.round(r.width) + ' h=' + Math.round(r.height) +
+                      ' src=' + (f.src || '(none)').slice(0, 60) + ' accessible=' + accessible + ' innerVideos=' + innerVideoCount);
+                  });
                   if (window.ReactNativeWebView) {
                     window.ReactNativeWebView.postMessage('DIAG::' + lines.join('\\n'));
                   }
