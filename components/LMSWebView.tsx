@@ -97,14 +97,13 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           overScrollMode="never"
           directionalLockEnabled
           allowsInlineMediaPlayback
-          // false lets the lesson video player's own async JS call .play() after a tap
-          // (Community already uses false for the same reason — Vimeo/Synthesia players
-          // often don't call .play() synchronously within the tap handler, and iOS's
-          // stricter "true" mode silently blocks any .play() outside that exact window,
-          // which is why the SCORM lesson video never advanced past readyState 0).
-          // injectedJavaScriptBeforeContentLoaded below blocks any .play() call before
-          // the user's first touch, so this doesn't reintroduce autoplay on page load.
-          mediaPlaybackRequiresUserAction={false}
+          // true — this exact "video autoplay/black screen on load" bug has been fixed
+          // by reverting to true three separate times in this project's history
+          // (commits cd69ddb, 38f7cbf, 342c7af). Setting it to false does let some lesson
+          // videos play, but no combination with a touchstart-gate has ever avoided the
+          // black-screen regression, so this trades that specific video playback for
+          // overall stability.
+          mediaPlaybackRequiresUserAction={true}
           setSupportMultipleWindows={false}
           allowsBackForwardNavigationGestures
           userAgent={WEBVIEW_USER_AGENT}
@@ -122,22 +121,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 document.head.appendChild(m);
               }
 
-              // mediaPlaybackRequiresUserAction is now false so lesson video players can
-              // call .play() asynchronously after a tap — block any .play() call before
-              // the user's first touch so this doesn't reintroduce autoplay on page load.
-              try {
-                var originalPlay = HTMLMediaElement.prototype.play;
-                var userInteracted = false;
-                document.addEventListener('touchstart', function() {
-                  userInteracted = true;
-                }, { once: true, capture: true });
-                HTMLMediaElement.prototype.play = function() {
-                  if (!userInteracted) {
-                    return Promise.resolve();
-                  }
-                  return originalPlay.apply(this, arguments);
-                };
-              } catch (e) {}
             })();
             true;
           `}
@@ -222,47 +205,17 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   header.style.setProperty('top', 'auto', 'important');
                 }
 
-                // Hide the language <select>'s visible text only — NOT a broad search for
-                // any element containing the word "English", which also matched (and
-                // incorrectly hid) the legitimate language switcher inside the hamburger
-                // menu that users need to see and tap.
-                var LANG_RE = /^(English|Français|Deutsch|Español|Italiano|Português|简体中文|日本語|한국어)$/;
-                function hideLanguageText() {
-                  var all = document.body.getElementsByTagName('*');
-                  for (var i = 0; i < all.length; i++) {
-                    var el = all[i];
-                    if (el.tagName !== 'SELECT') continue;
-                    // A <select>'s visible text is its selected <option>, rendered natively
-                    // by the browser — it isn't a separate DOM node display:none can hide.
-                    // Hide the text color instead, keeping the control (and any icon)
-                    // clickable.
-                    var selected = el.options && el.options[el.selectedIndex];
-                    if (selected && LANG_RE.test((selected.text || '').trim())) {
-                      // iOS renders <select> using the native OS picker chrome, which
-                      // ignores color/-webkit-text-fill-color entirely unless the native
-                      // appearance is disabled first — Android's WebView is web-styleable
-                      // by default so this wasn't needed there.
-                      el.style.setProperty('-webkit-appearance', 'none', 'important');
-                      el.style.setProperty('appearance', 'none', 'important');
-                      el.style.setProperty('color', 'transparent', 'important');
-                      el.style.setProperty('-webkit-text-fill-color', 'transparent', 'important');
-                      el.style.setProperty('text-shadow', 'none', 'important');
-                    }
-                  }
-                }
-
                 function runFixes() {
                   try { unstickHeader(); } catch (e) {}
-                  try { hideLanguageText(); } catch (e) {}
                 }
                 runFixes();
                 // Scroll listener catches the site re-applying fixed positioning via inline
                 // style on scroll (a childList mutation observer alone wouldn't see that).
                 window.addEventListener('scroll', runFixes, { passive: true });
                 new MutationObserver(runFixes).observe(document.body, { childList: true, subtree: true });
-                // The language <select>'s options can populate via a property change with
-                // no DOM node insertion/removal, which neither observer above would catch —
-                // poll for the first several seconds as a race-condition-proof safety net.
+                // The site can re-apply fixed positioning via a style/class change with no
+                // DOM node insertion/removal, which neither observer above would catch —
+                // poll for the first several seconds as a safety net.
                 var bcPollCount = 0;
                 var bcPollTimer = setInterval(function() {
                   runFixes();
