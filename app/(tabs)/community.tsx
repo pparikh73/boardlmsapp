@@ -72,6 +72,12 @@ export default function CommunityTab() {
         thirdPartyCookiesEnabled
         overScrollMode="never"
         directionalLockEnabled
+        // iOS-only: without this, rubber-band overscroll past the page edge (most
+        // visible scrolling right on the homepage, whose layout is wider/different
+        // from the rest of the site) reveals the WebView's own blank background.
+        // react-native-webview has no per-axis bounce control, so this disables
+        // rubber-banding in both directions rather than just horizontally.
+        bounces={false}
         allowsBackForwardNavigationGestures
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
