@@ -2,6 +2,7 @@
   "expo": {
     "name": "Board Connect",
     "slug": "board-academy",
+    "owner": "pparikh",
     "version": "2.116621.23",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
