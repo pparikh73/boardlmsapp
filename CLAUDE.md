@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.30`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.31`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -124,13 +124,22 @@ the scroll container for unnamed wrappers) and `overflow-x: auto !important` bac
 containment of the document now rests solely on the `html`/`body` `overflow-x: clip` rule,
 which stays. Diagnostics are left **on** so one build reports both outcomes.
 
-**This is close to what `2.116621.24` shipped** — live scroller, open ancestors, document
-clipped — and that build did not fix the white space. If `body.scrollWidth` still exceeds
-the viewport, the document-level clip is not applying and that is what to investigate; do
-**not** re-clip `ratioContainer`, which `2.116621.26`–`.29` proved breaks the carousel
-without fixing the bleed. Check `html.ovx`/`body.ovx` in the overlay first: if they do not
-read `clip`, the rule is being overridden or the feature test is failing, and neither can
-be fixed by clipping something else.
+Version `2.116621.31` acts on the next diagnostic reading: `display: grid` on
+`carousel-scrollContainer` with `sw=1853 cw=350`. It constrains the grid itself —
+`grid-auto-flow: column`, `grid-auto-columns: 247px`, `grid-template-columns: none`,
+`width: 350px`, `max-width: 100%`, `overflow-x: auto`, `overscroll-behavior-x: contain` —
+plus `min-width`/`max-width: 247px` on the direct children. `grid-template-columns: none`
+is **load-bearing**: `grid-auto-columns` sizes only implicit tracks, so without it an
+explicit template on the site's own rule would make the 247px inert. Diagnostics stay on.
+
+Two caveats for whoever tests this. `width: 350px` is **device-specific** — it is the
+measured `clientWidth` on a 390px-viewport iPhone, and on a 375px or 430px device it will
+be wrong (`max-width: 100%` keeps it from overflowing, but it will not fill). `width: 100%`
+is the portable equivalent and should be preferred once the approach is confirmed. And the
+white space is still unresolved independently: `2.116621.30` left containment resting
+solely on the `html`/`body` `overflow-x: clip` rule, which has never been shown to work —
+check `html.ovx`/`body.ovx` in the overlay. Do **not** re-clip `ratioContainer`;
+`2.116621.26`–`.29` proved that breaks the carousel without fixing the bleed.
 
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track

@@ -212,9 +212,30 @@ export default function CommunityTab() {
                 '[class*="ListItem-styles-item"] {' +
                 '  overflow: visible !important;' +
                 '}' +
+                // 2.116621.31: the diagnostic reported display:grid on the scroll
+                // container with sw=1853 cw=350. Constrain the grid itself so the track
+                // is a row of fixed 247px columns inside a 350px scrollport.
+                //
+                // grid-template-columns:none is load-bearing and not optional:
+                // grid-auto-columns only sizes IMPLICIT tracks, so if the site declares
+                // explicit template columns (which a 1853px track strongly implies), the
+                // 247px below would be ignored and this whole rule would be inert.
+                //
+                // overscroll-behavior-x:contain stops the carousel chaining its scroll
+                // out to the document once it reaches an end.
                 '[class*="carousel-scrollContainer"] {' +
+                '  grid-auto-flow: column !important;' +
+                '  grid-auto-columns: 247px !important;' +
+                '  grid-template-columns: none !important;' +
+                '  width: 350px !important;' +
+                '  max-width: 100% !important;' +
                 '  overflow-x: auto !important;' +
+                '  overscroll-behavior-x: contain !important;' +
                 '  -webkit-overflow-scrolling: touch !important;' +
+                '}' +
+                '[class*="carousel-scrollContainer"] > * {' +
+                '  min-width: 247px !important;' +
+                '  max-width: 247px !important;' +
                 '}';
               document.head.appendChild(carouselStyle);
             } catch (e) {}
