@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.26`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.27`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -101,15 +101,14 @@ viewport). That is why the two earlier attempts failed — `bounces={false}`
 document, and overflow on an ancestor cannot contain a descendant that establishes its own
 scrolling box. Found via the diagnostic overlay in `2.116621.25`.
 
-Version `2.116621.26` clips the carousel container and its `ratioContainer` parent
-directly, and turns the diagnostic overlay back off (`COMMUNITY_DIAGNOSTICS = false`).
-**Not yet built or tested on device.** Two things to check when it is: that the white space
-is gone, and that the carousel can still be swiped — clipping a scroll container also
-removes its own scrolling, so if the carousel is frozen, drop `carousel-scrollContainer`
-from that selector and keep only `ratioContainer` (a clipping parent contains the bleed
-without disabling the child scroller). Once confirmed, delete
-`constants/communityDiagnostic.ts` and the `COMMUNITY_DIAGNOSTICS` flag, then promote to a
-public release via App Store Connect.
+Version `2.116621.26` clipped both the carousel container and its `ratioContainer` parent.
+Tested on device: **the white space was fixed, but the carousel froze** — clipping a scroll
+container removes the scrolling that makes it one, so ~1500px of carousel content became
+unreachable. Version `2.116621.27` clips **only** `ratioContainer`, which contains the
+bleed while the child keeps its own `overflow-x` and stays swipeable. **Not yet built or
+tested on device** — check both the white space and carousel swiping again. Once confirmed,
+delete `constants/communityDiagnostic.ts` and the `COMMUNITY_DIAGNOSTICS` flag, then
+promote to a public release via App Store Connect.
 
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
@@ -179,8 +178,10 @@ been started yet.
   clipping `[class*="carousel-scrollContainer"]` and `[class*="ratioContainer"]` directly.
   Match these by class *substring* — the full names are emotion hashes
   (`css-1deprjs-carousel-scrollContainer`) regenerated on every site deploy, so a pinned
-  hash silently stops matching. Note that clipping a scroll container also disables its own
-  scrolling; clip the parent alone if the child needs to stay swipeable.
+  hash silently stops matching. **Clip the parent only, never the scroll container itself** —
+  `2.116621.26` clipped both and the carousel froze on device, since clipping a scroll
+  container removes the scrolling that makes it one. Clipping `ratioContainer` alone
+  contains the bleed while the child keeps its own `overflow-x`.
 - **When horizontal overflow survives a document-level fix, measure before fixing again.**
   `constants/communityDiagnostic.ts` (gated by `COMMUNITY_DIAGNOSTICS`) reports viewport vs
   document scrollWidth, whether the clip rule actually applied, the widest elements with

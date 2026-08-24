@@ -165,14 +165,17 @@ export default function CommunityTab() {
               // (css-1deprjs-carousel-scrollContainer) — that hash is regenerated on
               // every site deploy, so pinning it would silently stop matching.
               //
-              // TRADEOFF: clip on the scroll container also disables the carousel's own
-              // horizontal swiping, since that scrolling is what is being removed. If
-              // the carousel needs to stay swipeable, drop scrollContainer from this
-              // selector and keep only ratioContainer — a clipping parent contains the
-              // bleed without disabling the child scroll container.
+              // Clip the PARENT only, never the scroll container itself. 2.116621.26
+              // clipped both and was tested on device: the white space went away but the
+              // carousel froze, because clipping a scroll container removes the very
+              // scrolling that makes it one — roughly 1500px of carousel content became
+              // unreachable. Clipping only the ratioContainer parent contains the bleed
+              // while the child keeps its own overflow-x and stays swipeable.
+              //
+              // So: do NOT add carousel-scrollContainer back to this selector.
               var carouselStyle = document.createElement('style');
               carouselStyle.textContent =
-                '[class*="carousel-scrollContainer"], [class*="ratioContainer"] {' +
+                '[class*="ratioContainer"] {' +
                 '  overflow-x: clip !important;' +
                 '  max-width: 100% !important;' +
                 '}';
