@@ -84,7 +84,7 @@ try {
       var fixedOffenders = offenders.filter(function (o) { return o.pos === 'fixed'; }).length;
 
       var lines = [];
-      lines.push('BC DIAG v1 (tap to collapse)');
+      lines.push('BC DIAG v2 (tap to collapse)');
       lines.push('vw=' + vw + ' innerW=' + window.innerWidth + ' screenW=' + screen.width + ' dpr=' + window.devicePixelRatio);
       lines.push('doc.scrollW=' + de.scrollWidth + ' body.scrollW=' + (document.body ? document.body.scrollWidth : '-') + ' scrollX=' + Math.round(window.scrollX || 0));
       lines.push('clipSupported=' + (window.CSS && CSS.supports ? CSS.supports('overflow-x', 'clip') : '?') +
@@ -100,6 +100,44 @@ try {
       }
       for (var k = 0; k < Math.min(3, scrollers.length); k++) {
         lines.push(' scroller: ' + desc(scrollers[k]) + ' sw=' + scrollers[k].scrollWidth + ' cw=' + scrollers[k].clientWidth);
+      }
+
+      // Targeted carousel probe. The generic lists above only surface an element
+      // if it still overflows AND still computes overflow-x auto/scroll — a
+      // collapsed carousel satisfies neither, so it would be invisible there.
+      // These are reported unconditionally.
+      var ratio = document.querySelectorAll('[class*="ratioContainer"]');
+      var scroll = document.querySelectorAll('[class*="carousel-scrollContainer"]');
+      lines.push('--- carousel probe ---');
+      lines.push('selector hits: ratioContainer=' + ratio.length + ' scrollContainer=' + scroll.length);
+      if (ratio.length === 0 && scroll.length === 0) {
+        lines.push('!! NEITHER SELECTOR MATCHES — class names changed, rules are dead');
+      }
+      function probe(label, el) {
+        if (!el) return;
+        var cs = window.getComputedStyle(el);
+        var track = el.firstElementChild;
+        lines.push(' ' + label + ' ' + desc(el));
+        lines.push('   sw=' + el.scrollWidth + ' cw=' + el.clientWidth + ' ow=' + el.offsetWidth +
+                   ' scrollable=' + (el.scrollWidth > el.clientWidth + 1));
+        lines.push('   ovx=' + cs.overflowX + ' ovy=' + cs.overflowY + ' maxW=' + cs.maxWidth +
+                   ' w=' + cs.width + ' disp=' + cs.display);
+        lines.push('   kids=' + el.children.length +
+                   (track ? ' track.sw=' + track.scrollWidth + ' track.ow=' + track.offsetWidth : ''));
+      }
+      for (var p = 0; p < Math.min(2, scroll.length); p++) probe('scrollContainer', scroll[p]);
+      for (var q = 0; q < Math.min(2, ratio.length); q++) probe('ratioContainer', ratio[q]);
+      // Walk up from the first scroll container: any ancestor still clipping, or
+      // any ancestor narrower than the track, explains a truncated carousel.
+      if (scroll.length) {
+        var up = scroll[0].parentElement, depth = 0;
+        while (up && up !== document.body && depth < 6) {
+          var ucs = window.getComputedStyle(up);
+          if (ucs.overflowX !== 'visible' || ucs.overflowY !== 'visible') {
+            lines.push('   ^clip@' + depth + ' ' + desc(up) + ' ovx=' + ucs.overflowX + ' ovy=' + ucs.overflowY + ' cw=' + up.clientWidth);
+          }
+          up = up.parentElement; depth++;
+        }
       }
 
       var text = lines.join('\\n');

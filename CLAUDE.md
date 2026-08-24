@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.28`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.29`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -106,14 +106,21 @@ Tested on device: the white space was fixed, but the carousel froze. `2.116621.2
 only `ratioContainer`; the white space stayed fixed, but the "Looking for more?" carousel
 then showed only 2 of 4 cards and would not scroll on iOS (Android was unaffected).
 
-Version `2.116621.28` drops `max-width: 100%` from the `ratioContainer` rule (it was
-belt-and-braces, and constraining the parent is the likely reason the carousel track had
-nothing left to scroll), asserts `overflow-x: auto` on the scroll container, and forces
-`overflow: visible` on the wrappers between `ratioContainer` and `body` — stopping short of
-`body`/`html`, which must keep the document-level clip. **Not yet built or tested.** Check
-all three: white space gone, all 4 cards present, carousel swipes. Once confirmed, delete
-`constants/communityDiagnostic.ts` and the `COMMUNITY_DIAGNOSTICS` flag, then promote to a
-public release via App Store Connect.
+Version `2.116621.28` dropped `max-width: 100%` from the `ratioContainer` rule, asserted
+`overflow-x: auto` on the scroll container, and opened up the intermediate wrappers. Tested
+on device: **no change** — still 2 of 4 cards, still unscrollable. So the collapse is not
+caused by `max-width`, and `-webkit-overflow-scrolling` (inert since iOS 13) was never
+going to help either.
+
+Version `2.116621.29` is a **second diagnostic build** (`COMMUNITY_DIAGNOSTICS = true`,
+overlay v2). The v1 overlay could not have answered this: it only listed nested scrollers
+that still overflowed *and* still computed `overflow-x: auto|scroll`, and a collapsed
+carousel satisfies neither. v2 adds an unconditional carousel probe reporting
+`scrollWidth`/`clientWidth`/`offsetWidth`, computed `overflow-x`, `max-width`, `width`,
+child count, inner track width, how many elements each selector actually matches, and any
+ancestor still clipping. **Do not ship `2.116621.29` publicly.** The key readings: if
+`sw == cw` the track collapsed (a layout cause); if `sw > cw` but swiping does nothing it
+is hit-testing; if `selector hits` is 0 the class names changed and every rule is dead.
 
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
