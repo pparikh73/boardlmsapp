@@ -5,6 +5,10 @@ export const SKILLJAR_DOMAIN = '34t7lq90dtcj7';
 export const SKILLJAR_BASE_URL = 'https://accounts.skilljar.com';
 export const SKILLJAR_CONTENT_URL = 'https://academy.board.com';
 export const COMMUNITY_BASE_URL = 'https://community.board.com';
+// Backdrop for the Community WebView. WKWebView's default backdrop is white, which
+// shows through anywhere the page itself doesn't paint. Keep this in sync with the
+// Community site's own page background.
+export const COMMUNITY_BACKGROUND = '#1a2444';
 // Community uses Azure AD B2C — separate from Academy's Skilljar SSO
 export const COMMUNITY_AUTH_URL = 'https://community.board.com/entry/signin?target=https%3A%2F%2Fcommunity.board.com%2F';
 // Community employee login uses Azure AD SAML (Boardway/corporate SSO)

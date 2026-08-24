@@ -4,7 +4,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView, WebViewRequest } from 'react-native-webview';
 import { useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COMMUNITY_BASE_URL, BRAND, WEBVIEW_USER_AGENT, ALLOWED_WEBVIEW_DOMAINS } from '../../constants/skilljar';
+import {
+  COMMUNITY_BASE_URL,
+  COMMUNITY_BACKGROUND,
+  BRAND,
+  WEBVIEW_USER_AGENT,
+  ALLOWED_WEBVIEW_DOMAINS,
+} from '../../constants/skilljar';
 
 export default function CommunityTab() {
   const webViewRef = useRef<WebView>(null);
@@ -66,17 +72,23 @@ export default function CommunityTab() {
       <WebView
         ref={webViewRef}
         source={{ uri: COMMUNITY_BASE_URL }}
-        style={{ flex: 1 }}
+        // styles.webview carries backgroundColor — react-native-webview has no
+        // backgroundColor *prop*, it reads style.backgroundColor and forwards it to
+        // the native setter, which sets _webView.scrollView.backgroundColor (see
+        // RNCWebViewImpl.m). That scroll view's backdrop is the white that shows
+        // through wherever the page itself doesn't paint.
+        style={styles.webview}
         onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
         overScrollMode="never"
         directionalLockEnabled
-        // iOS-only: without this, rubber-band overscroll past the page edge (most
-        // visible scrolling right on the homepage, whose layout is wider/different
-        // from the rest of the site) reveals the WebView's own blank background.
-        // react-native-webview has no per-axis bounce control, so this disables
-        // rubber-banding in both directions rather than just horizontally.
+        // iOS-only: suppresses rubber-banding past the content edge. Note this was
+        // originally added to fix the white area on the homepage and did NOT work —
+        // that area was real horizontal overflow, not a bounce artifact, and bounces
+        // has no effect on scrolling within genuinely-wider-than-viewport content.
+        // The overflow-x:clip rule below is the actual fix. Kept because suppressing
+        // rubber-band is still the behavior we want, not because it fixes anything.
         bounces={false}
         allowsBackForwardNavigationGestures
         allowsInlineMediaPlayback
@@ -104,13 +116,27 @@ export default function CommunityTab() {
             // Every independent fix below is wrapped in its own try/catch so one
             // throwing can't silently abort the rest of the script.
             try {
-              // Base styles. overflow-x:hidden is intentionally NOT applied here on
-              // either platform — on this site it collapses the hero/header layout into
-              // a single collapsed column regardless of whether it's scoped to html,
-              // body, or both. directionalLockEnabled (native WebView prop) already
-              // prevents horizontal panning without touching the page's own CSS.
+              // Base styles, plus the horizontal-overflow clamp.
+              //
+              // overflow-x:HIDDEN is still not usable here: per the CSS overflow spec,
+              // setting overflow-x:hidden while overflow-y is visible coerces overflow-y
+              // to 'auto', which turns body into a scroll container and changes
+              // containing-block/percentage resolution for descendants. That side effect
+              // — not the clipping itself — is what collapsed this site's hero/header
+              // flex layout into a single column in the earlier attempt.
+              //
+              // overflow-x:CLIP has no such side effect: it creates no scroll container,
+              // so overflow-y stays visible and layout is untouched. It removes the
+              // horizontal scrollable area outright, which directionalLockEnabled and
+              // bounces={false} cannot do — neither stops legitimate scrolling when the
+              // content is genuinely wider than the viewport, which is the case on the
+              // homepage. Requires iOS 16+ (WKWebView), hence the feature test.
               var style = document.createElement('style');
-              style.textContent = 'html, body { width: 100% !important; max-width: 100vw !important; }';
+              var rules = ['html, body { width: 100% !important; max-width: 100vw !important; }'];
+              if (window.CSS && CSS.supports && CSS.supports('overflow-x', 'clip')) {
+                rules.push('html, body { overflow-x: clip !important; }');
+              }
+              style.textContent = rules.join('');
               document.head.appendChild(style);
             } catch (e) {}
 
@@ -216,6 +242,10 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: '#1a2444',
+  },
+  webview: {
+    flex: 1,
+    backgroundColor: COMMUNITY_BACKGROUND,
   },
   navBar: {
     flexDirection: 'row',

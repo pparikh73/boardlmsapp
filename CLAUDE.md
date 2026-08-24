@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.23`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.24`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -90,12 +90,15 @@ build profile, so it doesn't need manual bumping.
   `credentialsSource: remote` in `eas.json` means EAS manages the real signing
   credentials server-side.
 
-## Current status (last updated: 2026-08-17)
+## Current status (last updated: 2026-08-24)
 
 **iOS**: Live on the App Store already (under an older build, predating the WebView fixes
-below). Build 60 / version `2.116621.23` — which includes all the fixes below — is
-uploaded to TestFlight and pending confirmation testing. Once confirmed, it still needs to
-be promoted to a public release via App Store Connect (see Release process above).
+below). Build 60 / version `2.116621.23` was tested on iPhone and **the Community
+horizontal white-space bug is still present** — the `bounces={false}` fix in that build
+addressed the wrong mechanism (see "Known tricky areas"). Version `2.116621.24` replaces it
+with an `overflow-x: clip` rule plus a non-white WebView backdrop; **not yet built or
+submitted**. Once a build is confirmed, it still needs to be promoted to a public release
+via App Store Connect (see Release process above).
 
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
@@ -120,15 +123,30 @@ been started yet.
   produced flaky, inconsistent results across test rounds. The fix that actually worked:
   measure the header's rendered height and set `body { padding-top: <height>px }` to
   reserve space for it, leaving the header itself alone.
-- **`overflow-x: hidden` is unsafe on the Community site specifically.** It collapses that
-  site's hero/header flex layout into a single-column mess, regardless of whether it's
-  scoped to `html`, `body`, or both. Horizontal panning is instead prevented via the
-  native `directionalLockEnabled` WebView prop, and horizontal rubber-band overscroll
-  (which was exposing a blank white background on the Community homepage specifically,
-  since that page's layout is wider than the rest of the site) is prevented via
-  `bounces={false}` (iOS-only; Android's equivalent is `overScrollMode="never"`).
-  `LMSWebView.tsx` (Academy) does not have this constraint and safely uses
-  `overflow-x: hidden` on iOS.
+- **Use `overflow-x: clip`, not `hidden`, on the Community site.** `overflow-x: hidden`
+  does collapse that site's hero/header flex layout into a single-column mess — but the
+  cause is a CSS spec side effect, not the clipping. Per spec, `overflow-x: hidden` with
+  `overflow-y: visible` coerces the used `overflow-y` to `auto`, silently making `body` a
+  scroll container and changing containing-block/percentage resolution for descendants.
+  `overflow-x: clip` creates no scroll container, so `overflow-y` stays `visible` and
+  layout is untouched. It needs iOS 16+ (WKWebView), so feature-test with
+  `CSS.supports('overflow-x','clip')`. `LMSWebView.tsx` (Academy) has a simpler layout and
+  safely uses `overflow-x: hidden` on iOS.
+- **Neither `directionalLockEnabled` nor `bounces={false}` stops horizontal white space.**
+  This cost a full TestFlight round (build 60), so don't repeat it. `bounces={false}` maps
+  to `UIScrollView.bounces = NO`, which only suppresses rubber-banding *past the content
+  edge*. When `contentSize.width > bounds.width` — true of the Community homepage, whose
+  layout is genuinely wider than the viewport — dragging right is ordinary scrolling
+  within real content, not overscroll, and bounces has no effect on it.
+  `directionalLockEnabled` only prevents diagonal panning; it does not prevent horizontal
+  scrolling. Removing the horizontal *scrollable area* (the `overflow-x: clip` rule above)
+  is the only thing that fixes this class of bug.
+- **`react-native-webview` has no `backgroundColor` prop** — passing one is silently
+  ignored (and fails typecheck). Set `style.backgroundColor`; RN forwards it to the native
+  setter, which assigns `_webView.scrollView.backgroundColor` and toggles `drawsBackground`
+  (`RNCWebViewImpl.m`). That scroll view's backdrop defaults to **white** and is what shows
+  through wherever the page doesn't paint — so it's worth setting to the site's own
+  background as a second line of defence behind any overflow fix.
 - **`mediaPlaybackRequiresUserAction={false}` is required**, not optional — the SCORM
   lesson player calls `.play()` asynchronously after a tap, and if this is `true` that
   call gets blocked. To avoid reintroducing autoplay-on-load as a side effect, a
