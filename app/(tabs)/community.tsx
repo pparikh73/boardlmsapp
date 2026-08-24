@@ -189,10 +189,28 @@ export default function CommunityTab() {
               //     was REMOVED in iOS 13 — WKWebView ignores it and momentum scrolling
               //     is the default — so it is inert on any device this app supports. It
               //     is kept because it is harmless and explicit, but it is not the fix.
+              // 2.116621.30, from the v2 diagnostic: nestedXScrollers=0 — the scroll
+              // container had lost its scrolling entirely — while body.scrollWidth was
+              // 1049 against a 390px viewport, so BOTH bugs were live at once. The
+              // ratioContainer clip was costing the carousel without containing the
+              // bleed.
+              //
+              // So stop clipping the carousel's ancestors and give the scroll container
+              // its scrolling back. A working scroll container contains its own overflow
+              // by definition; containment of the document now rests on the html/body
+              // overflow-x: clip rule above, which is deliberately left in place.
+              //
+              // CAUTION: this is close to the configuration 2.116621.24 shipped — live
+              // scroller, open ancestors, document clipped — and that build did not fix
+              // the white space. If body.scrollWidth still exceeds the viewport in the
+              // overlay, the document-level clip is not doing its job and the next step
+              // is to find out why it is not applying, NOT to re-clip ratioContainer.
               var carouselStyle = document.createElement('style');
               carouselStyle.textContent =
-                '[class*="ratioContainer"] {' +
-                '  overflow-x: clip !important;' +
+                '[class*="ratioContainer"],' +
+                '[class*="mobileMediaContainer"],' +
+                '[class*="ListItem-styles-item"] {' +
+                '  overflow: visible !important;' +
                 '}' +
                 '[class*="carousel-scrollContainer"] {' +
                 '  overflow-x: auto !important;' +
@@ -208,8 +226,11 @@ export default function CommunityTab() {
               // Deliberately stops before body/html: those carry the document-level
               // overflow-x:clip rule above, and forcing them visible would reopen the
               // original white-space bug. Only the intermediate wrappers are touched.
+              // Walks up from the SCROLL CONTAINER, not from ratioContainer, so
+              // ratioContainer itself is included — it is now one of the ancestors that
+              // must not clip. Catches unnamed wrappers the class selectors above miss.
               function openCarouselAncestors() {
-                var containers = document.querySelectorAll('[class*="ratioContainer"]');
+                var containers = document.querySelectorAll('[class*="carousel-scrollContainer"]');
                 for (var i = 0; i < containers.length; i++) {
                   var el = containers[i].parentElement;
                   while (el && el !== document.body && el !== document.documentElement) {

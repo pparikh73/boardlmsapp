@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.29`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.30`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -112,15 +112,25 @@ on device: **no change** — still 2 of 4 cards, still unscrollable. So the coll
 caused by `max-width`, and `-webkit-overflow-scrolling` (inert since iOS 13) was never
 going to help either.
 
-Version `2.116621.29` is a **second diagnostic build** (`COMMUNITY_DIAGNOSTICS = true`,
-overlay v2). The v1 overlay could not have answered this: it only listed nested scrollers
-that still overflowed *and* still computed `overflow-x: auto|scroll`, and a collapsed
-carousel satisfies neither. v2 adds an unconditional carousel probe reporting
-`scrollWidth`/`clientWidth`/`offsetWidth`, computed `overflow-x`, `max-width`, `width`,
-child count, inner track width, how many elements each selector actually matches, and any
-ancestor still clipping. **Do not ship `2.116621.29` publicly.** The key readings: if
-`sw == cw` the track collapsed (a layout cause); if `sw > cw` but swiping does nothing it
-is hit-testing; if `selector hits` is 0 the class names changed and every rule is dead.
+Version `2.116621.29` (diagnostic v2) reported `nestedXScrollers=0` with
+`body.scrollWidth=1049` against a 390px viewport — the scroll container had lost its
+scrolling entirely **and** the bleed was still there, worse than the original 832. So the
+`ratioContainer` clip was costing the carousel without buying containment.
+
+Version `2.116621.30` reverses that: `overflow: visible` on the carousel's ancestors
+(`ratioContainer`, `mobileMediaContainer`, `ListItem-styles-item`, plus a JS walk up from
+the scroll container for unnamed wrappers) and `overflow-x: auto !important` back on
+`carousel-scrollContainer`. A working scroll container contains its own overflow;
+containment of the document now rests solely on the `html`/`body` `overflow-x: clip` rule,
+which stays. Diagnostics are left **on** so one build reports both outcomes.
+
+**This is close to what `2.116621.24` shipped** — live scroller, open ancestors, document
+clipped — and that build did not fix the white space. If `body.scrollWidth` still exceeds
+the viewport, the document-level clip is not applying and that is what to investigate; do
+**not** re-clip `ratioContainer`, which `2.116621.26`–`.29` proved breaks the carousel
+without fixing the bleed. Check `html.ovx`/`body.ovx` in the overlay first: if they do not
+read `clip`, the rule is being overridden or the feature test is failing, and neither can
+be fixed by clipping something else.
 
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
