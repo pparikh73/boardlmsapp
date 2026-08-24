@@ -14,6 +14,11 @@ on:
         options:
           - ios
           - android
+      submit:
+        description: Also submit the finished build to TestFlight (iOS only)
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   build:
@@ -45,6 +50,58 @@ jobs:
             exit 1
           fi
 
+      # Android submission needs a Google Play service-account JSON, which is not
+      # wired up as a secret. Fail here with an explanation rather than let the
+      # build run for 30 minutes and then die at the submit step.
+      - name: Reject unsupported submit combinations
+        if: inputs.submit && inputs.platform != 'ios'
+        run: |
+          echo "::error::submit is only wired up for iOS. Android submission needs the"
+          echo "Google Play service-account JSON (eas.json submit.production.android."
+          echo "serviceAccountKeyPath) added as a secret first."
+          exit 1
+
+      # eas submit resolves the ASC API key ONLY from the eas.json submit profile —
+      # its resolveAscApiKeySource() reads ctx.profile and never consults
+      # EXPO_ASC_API_KEY_PATH (those env vars are for `eas metadata` and the
+      # provisioning-profile flow). So the key has to exist at the exact path
+      # eas.json names. That path is read from eas.json rather than hardcoded, so
+      # this keeps working if it is ever changed.
+      - name: Stage App Store Connect API key
+        if: inputs.submit && inputs.platform == 'ios'
+        env:
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+        run: |
+          if [ -z "$ASC_API_KEY_P8" ]; then
+            echo "::error::ASC_API_KEY_P8 repository secret is empty or unset."
+            echo "It must contain the full contents of the .p8 file, including the"
+            echo "-----BEGIN PRIVATE KEY----- and -----END PRIVATE KEY----- lines."
+            exit 1
+          fi
+          # Optional chaining so a missing submit block yields an empty string and
+          # the guard below reports it, instead of node throwing a raw TypeError.
+          # (The default branch's eas.json currently has no submit block at all, so
+          # dispatching submit=true against it must fail readably.)
+          ASC_PATH="$(node -p "require('./eas.json').submit?.production?.ios?.ascApiKeyPath ?? ''")"
+          if [ -z "$ASC_PATH" ] || [ "$ASC_PATH" = "undefined" ]; then
+            echo "::error::eas.json on this ref has no submit.production.ios.ascApiKeyPath."
+            echo "Dispatch against a branch whose eas.json contains the submit profile."
+            exit 1
+          fi
+          # The configured path is absolute and outside the workspace, so the
+          # directory generally does not exist on a fresh runner.
+          sudo mkdir -p "$(dirname "$ASC_PATH")"
+          sudo chown "$(id -u):$(id -g)" "$(dirname "$ASC_PATH")"
+          # umask first so the key is never briefly world-readable.
+          ( umask 077 && printf '%s' "$ASC_API_KEY_P8" > "$ASC_PATH" )
+          # Record for the cleanup step without re-reading the key itself.
+          echo "ASC_PATH=$ASC_PATH" >> "$GITHUB_ENV"
+          if ! grep -q "BEGIN PRIVATE KEY" "$ASC_PATH"; then
+            echo "::error::ASC_API_KEY_P8 does not look like a PEM private key."
+            exit 1
+          fi
+          echo "Staged ASC API key at $ASC_PATH"
+
       - name: Verify EAS authentication
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -52,7 +109,22 @@ jobs:
 
       # No --no-wait: waiting means this job's conclusion reflects the actual
       # build outcome rather than just a successful submission.
+      # --auto-submit chains submission onto the same command, so the submit step
+      # uses the build EAS just produced without needing its id passed back in.
       - name: Build (${{ inputs.platform }}, production profile)
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: npx eas-cli build --platform ${{ inputs.platform }} --profile production --non-interactive
+        run: |
+          if [ "${{ inputs.submit }}" = "true" ]; then
+            npx eas-cli build --platform ${{ inputs.platform }} --profile production --non-interactive --auto-submit
+          else
+            npx eas-cli build --platform ${{ inputs.platform }} --profile production --non-interactive
+          fi
+
+      # always(): the key must not survive on the runner if the build failed or
+      # the job was cancelled.
+      - name: Remove staged API key
+        if: always() && env.ASC_PATH != ''
+        run: |
+          shred -u "$ASC_PATH" 2>/dev/null || rm -f "$ASC_PATH"
+          echo "Removed $ASC_PATH"
