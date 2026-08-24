@@ -7,10 +7,12 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   COMMUNITY_BASE_URL,
   COMMUNITY_BACKGROUND,
+  COMMUNITY_DIAGNOSTICS,
   BRAND,
   WEBVIEW_USER_AGENT,
   ALLOWED_WEBVIEW_DOMAINS,
 } from '../../constants/skilljar';
+import { COMMUNITY_DIAGNOSTIC_JS } from '../../constants/communityDiagnostic';
 
 export default function CommunityTab() {
   const webViewRef = useRef<WebView>(null);
@@ -95,6 +97,15 @@ export default function CommunityTab() {
         mediaPlaybackRequiresUserAction={false}
         setSupportMultipleWindows={false}
         userAgent={WEBVIEW_USER_AGENT}
+        // Diagnostic overlay posts its readings here too, so they land in the JS
+        // console for anyone attached with a debugger, not only on screen.
+        onMessage={(event) => {
+          if (!COMMUNITY_DIAGNOSTICS) return;
+          try {
+            const data = JSON.parse(event.nativeEvent.data);
+            if (data && data.bcDiag) console.log('[BC DIAG]\n' + data.bcDiag);
+          } catch {}
+        }}
         onContentProcessDidTerminate={() => webViewRef.current?.reload()}
         onRenderProcessGone={() => webViewRef.current?.reload()}
         injectedJavaScriptBeforeContentLoaded={`
@@ -230,6 +241,7 @@ export default function CommunityTab() {
                 if (bcPollCount > 20) clearInterval(bcPollTimer);
               }, 300);
             } catch (e) {}
+            ${COMMUNITY_DIAGNOSTICS ? COMMUNITY_DIAGNOSTIC_JS : ''}
           })();
           true;
         `}

@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.24`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.25`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -93,12 +93,17 @@ build profile, so it doesn't need manual bumping.
 ## Current status (last updated: 2026-08-24)
 
 **iOS**: Live on the App Store already (under an older build, predating the WebView fixes
-below). Build 60 / version `2.116621.23` was tested on iPhone and **the Community
-horizontal white-space bug is still present** — the `bounces={false}` fix in that build
-addressed the wrong mechanism (see "Known tricky areas"). Version `2.116621.24` replaces it
-with an `overflow-x: clip` rule plus a non-white WebView backdrop; **not yet built or
-submitted**. Once a build is confirmed, it still needs to be promoted to a public release
-via App Store Connect (see Release process above).
+below). **The Community horizontal white-space bug is still unfixed after two attempts** —
+`bounces={false}` (build 60 / `2.116621.23`) and `overflow-x: clip` (`2.116621.24`) were
+both tested on iPhone and neither resolved it. Since `clip` should remove document-level
+horizontal overflow outright, its failure points at a mechanism clipping cannot reach: a
+`position: fixed` descendant (whose containing block is the viewport, so an ancestor's
+overflow never clips it), a nested `overflow-x: auto` scroll container, or the clip rule
+not applying at all. Version `2.116621.25` is a **diagnostic build** — it adds an on-screen
+overlay (`constants/communityDiagnostic.ts`, gated by `COMMUNITY_DIAGNOSTICS`) reporting
+which of those three it is. **Do not ship `2.116621.25` publicly**: set
+`COMMUNITY_DIAGNOSTICS = false` and delete the diagnostic once the cause is known. Once a
+real fix is confirmed it still needs promoting to a public release via App Store Connect.
 
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
@@ -161,6 +166,12 @@ been started yet.
   actual top-level navigation should be domain-restricted (that's what satisfies Apple's
   4+ age rating "unrestricted web access" question — it's about the user browsing to
   arbitrary sites, not first-party embedded content).
+- **`overflow-x: clip` alone did not fix the Community white space either.** Tested on
+  device in `2.116621.24`. Clipping on `html`/`body` cannot contain a `position: fixed`
+  descendant (its containing block is the viewport) and cannot help when the horizontal
+  scroll lives in a *nested* `overflow-x: auto` container rather than the document. Check
+  the diagnostic overlay's `pos=` and `nestedXScrollers=` fields before attempting a third
+  fix — the mechanism decides which fix can possibly work.
 - **Every injected-JS fix should be wrapped in its own `try/catch`.** Sites change their
   DOM shape without notice; one throwing selector shouldn't silently abort every other
   fix in the same injection block.

@@ -9,6 +9,12 @@ export const COMMUNITY_BASE_URL = 'https://community.board.com';
 // shows through anywhere the page itself doesn't paint. Keep this in sync with the
 // Community site's own page background.
 export const COMMUNITY_BACKGROUND = '#1a2444';
+
+// TEMPORARY. Renders an on-screen diagnostic overlay on the Community tab to
+// identify the source of the horizontal white space. MUST be false for any
+// public App Store release — testers would otherwise see a debug overlay.
+// Delete this flag and constants/communityDiagnostic.ts once the bug is found.
+export const COMMUNITY_DIAGNOSTICS = true;
 // Community uses Azure AD B2C — separate from Academy's Skilljar SSO
 export const COMMUNITY_AUTH_URL = 'https://community.board.com/entry/signin?target=https%3A%2F%2Fcommunity.board.com%2F';
 // Community employee login uses Azure AD SAML (Boardway/corporate SSO)
