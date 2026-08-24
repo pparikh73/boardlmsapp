@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.27`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.28`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -102,13 +102,18 @@ document, and overflow on an ancestor cannot contain a descendant that establish
 scrolling box. Found via the diagnostic overlay in `2.116621.25`.
 
 Version `2.116621.26` clipped both the carousel container and its `ratioContainer` parent.
-Tested on device: **the white space was fixed, but the carousel froze** — clipping a scroll
-container removes the scrolling that makes it one, so ~1500px of carousel content became
-unreachable. Version `2.116621.27` clips **only** `ratioContainer`, which contains the
-bleed while the child keeps its own `overflow-x` and stays swipeable. **Not yet built or
-tested on device** — check both the white space and carousel swiping again. Once confirmed,
-delete `constants/communityDiagnostic.ts` and the `COMMUNITY_DIAGNOSTICS` flag, then
-promote to a public release via App Store Connect.
+Tested on device: the white space was fixed, but the carousel froze. `2.116621.27` clipped
+only `ratioContainer`; the white space stayed fixed, but the "Looking for more?" carousel
+then showed only 2 of 4 cards and would not scroll on iOS (Android was unaffected).
+
+Version `2.116621.28` drops `max-width: 100%` from the `ratioContainer` rule (it was
+belt-and-braces, and constraining the parent is the likely reason the carousel track had
+nothing left to scroll), asserts `overflow-x: auto` on the scroll container, and forces
+`overflow: visible` on the wrappers between `ratioContainer` and `body` — stopping short of
+`body`/`html`, which must keep the document-level clip. **Not yet built or tested.** Check
+all three: white space gone, all 4 cards present, carousel swipes. Once confirmed, delete
+`constants/communityDiagnostic.ts` and the `COMMUNITY_DIAGNOSTICS` flag, then promote to a
+public release via App Store Connect.
 
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
@@ -182,6 +187,10 @@ been started yet.
   `2.116621.26` clipped both and the carousel froze on device, since clipping a scroll
   container removes the scrolling that makes it one. Clipping `ratioContainer` alone
   contains the bleed while the child keeps its own `overflow-x`.
+- **`-webkit-overflow-scrolling: touch` does nothing on this app's iOS versions.** The
+  property was removed in iOS 13; WKWebView ignores it and momentum scrolling is the
+  default. It is present on the carousel rule in `community.tsx` because it was explicitly
+  requested, but do not treat it as a fix or spend a build round on it.
 - **When horizontal overflow survives a document-level fix, measure before fixing again.**
   `constants/communityDiagnostic.ts` (gated by `COMMUNITY_DIAGNOSTICS`) reports viewport vs
   document scrollWidth, whether the clip rule actually applied, the widest elements with

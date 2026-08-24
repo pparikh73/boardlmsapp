@@ -173,13 +173,61 @@ export default function CommunityTab() {
               // while the child keeps its own overflow-x and stays swipeable.
               //
               // So: do NOT add carousel-scrollContainer back to this selector.
+              //
+              // 2.116621.28: the "Looking for more?" carousel showed only 2 of 4 cards
+              // and would not scroll on iOS (Android was fine). Three changes here:
+              //
+              //  1. max-width:100% dropped from ratioContainer. It was belt-and-braces,
+              //     not load-bearing — overflow-x:clip alone contains the bleed. Forcing
+              //     the parent to the viewport width is the most likely reason the
+              //     carousel had nothing left to scroll: constrain the container and the
+              //     track collapses to it, so scrollWidth stops exceeding clientWidth.
+              //  2. overflow-x:auto asserted on the scroll container, so it is
+              //     unambiguously still a scroller regardless of what the clip on its
+              //     parent did to the cascade.
+              //  3. -webkit-overflow-scrolling:touch, as requested. Note this property
+              //     was REMOVED in iOS 13 — WKWebView ignores it and momentum scrolling
+              //     is the default — so it is inert on any device this app supports. It
+              //     is kept because it is harmless and explicit, but it is not the fix.
               var carouselStyle = document.createElement('style');
               carouselStyle.textContent =
                 '[class*="ratioContainer"] {' +
                 '  overflow-x: clip !important;' +
-                '  max-width: 100% !important;' +
+                '}' +
+                '[class*="carousel-scrollContainer"] {' +
+                '  overflow-x: auto !important;' +
+                '  -webkit-overflow-scrolling: touch !important;' +
                 '}';
               document.head.appendChild(carouselStyle);
+            } catch (e) {}
+
+            try {
+              // Ensure nothing BETWEEN ratioContainer and the document is clipping the
+              // carousel, which would cut off cards and swallow the touch target.
+              //
+              // Deliberately stops before body/html: those carry the document-level
+              // overflow-x:clip rule above, and forcing them visible would reopen the
+              // original white-space bug. Only the intermediate wrappers are touched.
+              function openCarouselAncestors() {
+                var containers = document.querySelectorAll('[class*="ratioContainer"]');
+                for (var i = 0; i < containers.length; i++) {
+                  var el = containers[i].parentElement;
+                  while (el && el !== document.body && el !== document.documentElement) {
+                    var cs = window.getComputedStyle(el);
+                    if (cs.overflowX !== 'visible' || cs.overflowY !== 'visible') {
+                      el.style.setProperty('overflow', 'visible', 'important');
+                    }
+                    el = el.parentElement;
+                  }
+                }
+              }
+              openCarouselAncestors();
+              // The carousel mounts late and re-renders, so reapply for a short while.
+              var carouselPolls = 0;
+              var carouselTimer = setInterval(function () {
+                openCarouselAncestors();
+                if (++carouselPolls > 20) clearInterval(carouselTimer);
+              }, 300);
             } catch (e) {}
 
             try {
