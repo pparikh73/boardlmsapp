@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.25`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.26`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -93,17 +93,23 @@ build profile, so it doesn't need manual bumping.
 ## Current status (last updated: 2026-08-24)
 
 **iOS**: Live on the App Store already (under an older build, predating the WebView fixes
-below). **The Community horizontal white-space bug is still unfixed after two attempts** —
-`bounces={false}` (build 60 / `2.116621.23`) and `overflow-x: clip` (`2.116621.24`) were
-both tested on iPhone and neither resolved it. Since `clip` should remove document-level
-horizontal overflow outright, its failure points at a mechanism clipping cannot reach: a
-`position: fixed` descendant (whose containing block is the viewport, so an ancestor's
-overflow never clips it), a nested `overflow-x: auto` scroll container, or the clip rule
-not applying at all. Version `2.116621.25` is a **diagnostic build** — it adds an on-screen
-overlay (`constants/communityDiagnostic.ts`, gated by `COMMUNITY_DIAGNOSTICS`) reporting
-which of those three it is. **Do not ship `2.116621.25` publicly**: set
-`COMMUNITY_DIAGNOSTICS = false` and delete the diagnostic once the cause is known. Once a
-real fix is confirmed it still needs promoting to a public release via App Store Connect.
+below). The Community horizontal white-space bug's **root cause is now identified**: the
+homepage carousel's scroll container (`scrollWidth=1853` vs `clientWidth=350`) is a nested
+scroll container whose overflow reached the document (`body.scrollWidth=832` vs a 390px
+viewport). That is why the two earlier attempts failed — `bounces={false}`
+(`2.116621.23`) and `overflow-x: clip` on `html`/`body` (`2.116621.24`) both targeted the
+document, and overflow on an ancestor cannot contain a descendant that establishes its own
+scrolling box. Found via the diagnostic overlay in `2.116621.25`.
+
+Version `2.116621.26` clips the carousel container and its `ratioContainer` parent
+directly, and turns the diagnostic overlay back off (`COMMUNITY_DIAGNOSTICS = false`).
+**Not yet built or tested on device.** Two things to check when it is: that the white space
+is gone, and that the carousel can still be swiped — clipping a scroll container also
+removes its own scrolling, so if the carousel is frozen, drop `carousel-scrollContainer`
+from that selector and keep only `ratioContainer` (a clipping parent contains the bleed
+without disabling the child scroller). Once confirmed, delete
+`constants/communityDiagnostic.ts` and the `COMMUNITY_DIAGNOSTICS` flag, then promote to a
+public release via App Store Connect.
 
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
@@ -166,12 +172,20 @@ been started yet.
   actual top-level navigation should be domain-restricted (that's what satisfies Apple's
   4+ age rating "unrestricted web access" question — it's about the user browsing to
   arbitrary sites, not first-party embedded content).
-- **`overflow-x: clip` alone did not fix the Community white space either.** Tested on
-  device in `2.116621.24`. Clipping on `html`/`body` cannot contain a `position: fixed`
-  descendant (its containing block is the viewport) and cannot help when the horizontal
-  scroll lives in a *nested* `overflow-x: auto` container rather than the document. Check
-  the diagnostic overlay's `pos=` and `nestedXScrollers=` fields before attempting a third
-  fix — the mechanism decides which fix can possibly work.
+- **The Community white space came from a NESTED scroll container, not the document.**
+  Three fixes failed before this was understood, so internalise the rule: overflow set on
+  an ancestor cannot contain a descendant that establishes its own scrolling box. The
+  culprit was the homepage carousel (`scrollWidth=1853`, `clientWidth=350`), fixed by
+  clipping `[class*="carousel-scrollContainer"]` and `[class*="ratioContainer"]` directly.
+  Match these by class *substring* — the full names are emotion hashes
+  (`css-1deprjs-carousel-scrollContainer`) regenerated on every site deploy, so a pinned
+  hash silently stops matching. Note that clipping a scroll container also disables its own
+  scrolling; clip the parent alone if the child needs to stay swipeable.
+- **When horizontal overflow survives a document-level fix, measure before fixing again.**
+  `constants/communityDiagnostic.ts` (gated by `COMMUNITY_DIAGNOSTICS`) reports viewport vs
+  document scrollWidth, whether the clip rule actually applied, the widest elements with
+  their `position` values, and any nested horizontal scroll containers. It found this bug
+  in one round after two blind attempts each cost a TestFlight cycle.
 - **Every injected-JS fix should be wrapped in its own `try/catch`.** Sites change their
   DOM shape without notice; one throwing selector shouldn't silently abort every other
   fix in the same injection block.

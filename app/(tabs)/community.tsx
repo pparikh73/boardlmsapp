@@ -89,8 +89,9 @@ export default function CommunityTab() {
         // originally added to fix the white area on the homepage and did NOT work —
         // that area was real horizontal overflow, not a bounce artifact, and bounces
         // has no effect on scrolling within genuinely-wider-than-viewport content.
-        // The overflow-x:clip rule below is the actual fix. Kept because suppressing
-        // rubber-band is still the behavior we want, not because it fixes anything.
+        // The carousel scroll-container clip rule below is the actual fix. Kept
+        // because suppressing rubber-band is still the behavior we want, not
+        // because it fixes anything.
         bounces={false}
         allowsBackForwardNavigationGestures
         allowsInlineMediaPlayback
@@ -149,6 +150,33 @@ export default function CommunityTab() {
               }
               style.textContent = rules.join('');
               document.head.appendChild(style);
+            } catch (e) {}
+
+            try {
+              // ROOT CAUSE of the horizontal white space (confirmed on device via the
+              // diagnostic overlay in 2.116621.25): the homepage carousel's scroll
+              // container reported scrollWidth=1853 against clientWidth=350, and that
+              // overflow reached the document — body.scrollWidth=832 against a 390px
+              // viewport. It is a NESTED scroll container, which is why clipping html
+              // and body never touched it: overflow on an ancestor cannot contain a
+              // descendant that establishes its own scrolling box.
+              //
+              // Matched on a class substring, not the full emotion hash
+              // (css-1deprjs-carousel-scrollContainer) — that hash is regenerated on
+              // every site deploy, so pinning it would silently stop matching.
+              //
+              // TRADEOFF: clip on the scroll container also disables the carousel's own
+              // horizontal swiping, since that scrolling is what is being removed. If
+              // the carousel needs to stay swipeable, drop scrollContainer from this
+              // selector and keep only ratioContainer — a clipping parent contains the
+              // bleed without disabling the child scroll container.
+              var carouselStyle = document.createElement('style');
+              carouselStyle.textContent =
+                '[class*="carousel-scrollContainer"], [class*="ratioContainer"] {' +
+                '  overflow-x: clip !important;' +
+                '  max-width: 100% !important;' +
+                '}';
+              document.head.appendChild(carouselStyle);
             } catch (e) {}
 
             try {
