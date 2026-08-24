@@ -1,0 +1,58 @@
+name: iOS Production Build
+
+# Manual trigger. Runs the EAS production build from a GitHub runner, which can
+# reach api.expo.dev. The build itself executes on Expo's servers either way —
+# this job only submits it and waits for the result.
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to build
+        required: true
+        default: ios
+        type: choice
+        options:
+          - ios
+          - android
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # EAS production builds routinely take 20-40 min; the default 360 min job
+    # timeout would let a hung build burn Actions minutes for hours.
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fail early if EXPO_TOKEN is not set
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::EXPO_TOKEN repository secret is empty or unset."
+            echo "Set it under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+      - name: Verify EAS authentication
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli whoami
+
+      # No --no-wait: waiting means this job's conclusion reflects the actual
+      # build outcome rather than just a successful submission.
+      - name: Build (${{ inputs.platform }}, production profile)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli build --platform ${{ inputs.platform }} --profile production --non-interactive
