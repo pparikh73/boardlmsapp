@@ -1,8 +1,12 @@
 name: iOS Production Build
 
-# Manual trigger. Runs the EAS production build from a GitHub runner, which can
-# reach api.expo.dev. The build itself executes on Expo's servers either way —
-# this job only submits it and waits for the result.
+# Manual trigger. Runs an EAS build from a GitHub runner, which can reach
+# api.expo.dev. The build itself executes on Expo's servers either way — this job
+# only submits it and waits for the result.
+#
+# The filename and the workflow name are historical: this builds any profile on
+# either platform, not just iOS production. Kept as-is deliberately so the
+# existing PR and any bookmarked Actions URL stay valid.
 on:
   workflow_dispatch:
     inputs:
@@ -14,8 +18,22 @@ on:
         options:
           - ios
           - android
+      profile:
+        description: >-
+          eas.json build profile. production gives a store artifact (.aab on
+          Android); preview and android-apk give a sideloadable .apk; appetize is
+          an iOS simulator build; development needs the dev client.
+        required: true
+        default: production
+        type: choice
+        options:
+          - development
+          - preview
+          - appetize
+          - android-apk
+          - production
       submit:
-        description: Also submit the finished build to TestFlight (iOS only)
+        description: Also submit the finished build to TestFlight (iOS + production profile only)
         required: false
         default: false
         type: boolean
@@ -50,15 +68,24 @@ jobs:
             exit 1
           fi
 
-      # Android submission needs a Google Play service-account JSON, which is not
-      # wired up as a secret. Fail here with an explanation rather than let the
-      # build run for 30 minutes and then die at the submit step.
+      # Submission is deliberately narrower than building. Android needs a Google
+      # Play service-account JSON that is not wired up as a secret, and the ASC key
+      # staging below reads submit.production.* from eas.json, so only the
+      # production profile is coherent. Fail here with an explanation rather than
+      # let the build run for 30 minutes and then die at the submit step.
       - name: Reject unsupported submit combinations
-        if: inputs.submit && inputs.platform != 'ios'
+        if: inputs.submit && (inputs.platform != 'ios' || inputs.profile != 'production')
         run: |
-          echo "::error::submit is only wired up for iOS. Android submission needs the"
-          echo "Google Play service-account JSON (eas.json submit.production.android."
-          echo "serviceAccountKeyPath) added as a secret first."
+          if [ "${{ inputs.platform }}" != "ios" ]; then
+            echo "::error::submit is only wired up for iOS. Android submission needs the"
+            echo "Google Play service-account JSON (eas.json submit.production.android."
+            echo "serviceAccountKeyPath) added as a secret first."
+          fi
+          if [ "${{ inputs.profile }}" != "production" ]; then
+            echo "::error::submit requires the production profile. The ASC API key is read"
+            echo "from eas.json submit.production.ios, and the other profiles are internal"
+            echo "distribution or simulator builds that App Store Connect will not accept."
+          fi
           exit 1
 
       # eas submit resolves the ASC API key ONLY from the eas.json submit profile —
@@ -68,7 +95,7 @@ jobs:
       # eas.json names. That path is read from eas.json rather than hardcoded, so
       # this keeps working if it is ever changed.
       - name: Stage App Store Connect API key
-        if: inputs.submit && inputs.platform == 'ios'
+        if: inputs.submit && inputs.platform == 'ios' && inputs.profile == 'production'
         env:
           ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
         run: |
@@ -111,14 +138,14 @@ jobs:
       # build outcome rather than just a successful submission.
       # --auto-submit chains submission onto the same command, so the submit step
       # uses the build EAS just produced without needing its id passed back in.
-      - name: Build (${{ inputs.platform }}, production profile)
+      - name: Build (${{ inputs.platform }}, ${{ inputs.profile }} profile)
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           if [ "${{ inputs.submit }}" = "true" ]; then
-            npx eas-cli build --platform ${{ inputs.platform }} --profile production --non-interactive --auto-submit
+            npx eas-cli build --platform ${{ inputs.platform }} --profile ${{ inputs.profile }} --non-interactive --auto-submit
           else
-            npx eas-cli build --platform ${{ inputs.platform }} --profile production --non-interactive
+            npx eas-cli build --platform ${{ inputs.platform }} --profile ${{ inputs.profile }} --non-interactive
           fi
 
       # always(): the key must not survive on the runner if the build failed or
