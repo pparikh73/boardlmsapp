@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.33`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.34`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -159,6 +159,16 @@ container, for a logo overlapping the subtitle. **Untested** — to be checked o
 before any build submission. The Community carousel and white-space state is unchanged
 from `.32`.
 
+Version `2.116621.34` fixes the Academy header overlap TJ reported on narrow Android
+screens — the Board Academy logo colliding with the language selector. **That header is
+Skilljar's own web markup, not a React Native component**; there is no logo-plus-language
+header anywhere in this repo, so the fix is injected CSS in `LMSWebView.tsx`, not a style
+change. It reuses the existing `findFixedHeader()` rather than Skilljar's class names,
+makes the bar a nowrap flex row, returns absolutely-positioned **direct** children to flow
+(a deeper dropdown panel must stay absolute to open), and gives the logo
+`height: 22px; width: auto; max-width: 55%; flex-shrink: 1` with the right-hand controls at
+`flex-shrink: 0`. **Untested.**
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -240,6 +250,13 @@ been started yet.
   document scrollWidth, whether the clip rule actually applied, the widest elements with
   their `position` values, and any nested horizontal scroll containers. It found this bug
   in one round after two blind attempts each cost a TestFlight cycle.
+- **A "header" bug may not be in this codebase at all.** The Academy and Community screens
+  render whole third-party sites, so a reported header, logo or nav defect is usually
+  Skilljar's or Vanilla's own markup rather than a React Native component. Grep for the
+  element before writing a style fix: `2.116621.34` was requested as RN style props on a
+  `rightControls`/language-selector component that exists on no branch. The fix belonged in
+  injected CSS. Prefer driving such fixes off a measured element (e.g. `findFixedHeader()`)
+  over the site's build-generated class names, which change on deploy.
 - **Every injected-JS fix should be wrapped in its own `try/catch`.** Sites change their
   DOM shape without notice; one throwing selector shouldn't silently abort every other
   fix in the same injection block.

@@ -393,6 +393,86 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   bcPollCount++;
                   if (bcPollCount > 20) clearInterval(bcPollTimer);
                 }, 300);
+
+                // Narrow-screen header overlap: on Android below roughly 400dp the
+                // site's own header lays the Board Academy logo and the language
+                // selector (globe + "English") on one row and they collide. This is
+                // Skilljar's markup, not ours, so it is fixed here in CSS rather than
+                // in any React Native style.
+                //
+                // Driven off findFixedHeader() rather than Skilljar's class names on
+                // purpose: those are build-generated and would silently stop matching
+                // on a site deploy, leaving an inert rule and a wasted build round.
+                //
+                // Own try/catch so a DOM shape change here cannot abort the padding
+                // fix above, which is the more important of the two.
+                try {
+                  function fixHeaderOverlap() {
+                    var header = findFixedHeader();
+                    if (!header) return;
+
+                    // The row has to be a nowrap flex line for shrink factors to mean
+                    // anything at all.
+                    if (window.getComputedStyle(header).display.indexOf('flex') === -1) {
+                      header.style.setProperty('display', 'flex', 'important');
+                    }
+                    header.style.setProperty('align-items', 'center', 'important');
+                    header.style.setProperty('flex-wrap', 'nowrap', 'important');
+
+                    // An absolutely-positioned child is out of flow, so no flex rule
+                    // can keep it clear of the logo — that is the overlap. Restricted
+                    // to DIRECT children: a dropdown panel deeper in the tree is
+                    // legitimately absolute and must stay that way to open correctly.
+                    var kids = header.children;
+                    for (var i = 0; i < kids.length; i++) {
+                      if (window.getComputedStyle(kids[i]).position === 'absolute') {
+                        kids[i].style.setProperty('position', 'static', 'important');
+                      }
+                    }
+
+                    // Logo: height-driven so it scales instead of being clipped, and
+                    // allowed to shrink to at most 55% of the bar.
+                    var logo = header.querySelector('img, svg');
+                    if (logo) {
+                      logo.style.setProperty('height', '22px', 'important');
+                      logo.style.setProperty('width', 'auto', 'important');
+                      logo.style.setProperty('max-width', '55%', 'important');
+                      logo.style.setProperty('flex-shrink', '1', 'important');
+                      logo.style.setProperty('object-fit', 'contain', 'important');
+                    }
+
+                    // Find which direct child of the header contains the logo; every
+                    // other direct child is the right-hand controls.
+                    var logoHost = logo;
+                    while (logoHost && logoHost.parentElement !== header) {
+                      logoHost = logoHost.parentElement;
+                    }
+                    for (var k = 0; k < kids.length; k++) {
+                      if (kids[k] === logoHost) {
+                        // min-width:0 is required — a flex item's automatic minimum
+                        // size is its content size, so without this the logo refuses
+                        // to shrink and flex-shrink:1 above does nothing.
+                        kids[k].style.setProperty('flex-shrink', '1', 'important');
+                        kids[k].style.setProperty('min-width', '0', 'important');
+                        kids[k].style.setProperty('max-width', '55%', 'important');
+                      } else {
+                        kids[k].style.setProperty('flex-shrink', '0', 'important');
+                      }
+                    }
+                  }
+
+                  fixHeaderOverlap();
+                  // Re-apply: the site re-renders its header after hydration, and a
+                  // rotation changes which widths collide.
+                  window.addEventListener('resize', fixHeaderOverlap, { passive: true });
+                  new MutationObserver(fixHeaderOverlap).observe(document.body, { childList: true, subtree: true });
+                  var bcHdrCount = 0;
+                  var bcHdrTimer = setInterval(function() {
+                    fixHeaderOverlap();
+                    bcHdrCount++;
+                    if (bcHdrCount > 20) clearInterval(bcHdrTimer);
+                  }, 300);
+                } catch (e) {}
               } catch (e) {}
 
               try {
