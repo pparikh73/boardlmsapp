@@ -43,11 +43,15 @@ export default function RootLayout() {
         <link rel="manifest" href="/manifest.json" />
       </Head>
       <StatusBar style="light" backgroundColor={BRAND.primary} />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="login" />
-        <Stack.Screen name="guest-login" />
-        <Stack.Screen name="sso-webview" />
-        <Stack.Screen name="(tabs)" />
+      {/* animation: 'none' on both the shared screenOptions and each screen —
+          Android's default screen transition produced a visible flash between
+          routes. Set per-screen as well as globally so a screen that supplies its
+          own options object cannot silently reinstate the default. */}
+      <Stack screenOptions={{ headerShown: false, animation: 'none' }}>
+        <Stack.Screen name="login" options={{ animation: 'none' }} />
+        <Stack.Screen name="guest-login" options={{ animation: 'none' }} />
+        <Stack.Screen name="sso-webview" options={{ animation: 'none' }} />
+        <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
       </Stack>
     </SafeAreaProvider>
   );

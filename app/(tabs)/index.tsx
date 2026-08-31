@@ -151,6 +151,10 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flexGrow: 1,
+    // minHeight pairs with flexGrow so justifyContent:'center' has a definite
+    // height to centre within on Android, where the content container could
+    // otherwise size to content and leave the layout shifted.
+    minHeight: '100%',
     paddingHorizontal: 24,
     paddingTop: 40,
     paddingBottom: 24,
@@ -162,7 +166,14 @@ const styles = StyleSheet.create({
   },
   headerLogo: {
     width: 260,
-    height: 110,
+    // aspectRatio instead of a fixed height: on Android the fixed 110 did not
+    // account for the image's intrinsic ratio once width was constrained by the
+    // parent, so the laid-out box overlapped the subtitle below. 260/110 is the
+    // asset's own ratio, and maxHeight keeps it from exceeding the old height on
+    // a narrower screen where width resolves below 260.
+    aspectRatio: 260 / 110,
+    maxHeight: 110,
+    alignSelf: 'center',
     marginBottom: 8,
   },
   subtitle: {

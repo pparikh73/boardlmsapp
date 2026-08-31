@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.32`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.33`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -148,6 +148,16 @@ changed: the carousel grid constraints from `.31` are still in place and still u
 device, and the white space remains unresolved — containment still rests solely on the
 `html`/`body` `overflow-x: clip` rule, which has never been shown to apply. Re-enabling the
 overlay is one line in `constants/skilljar.ts`.
+
+Version `2.116621.33` is the first change in this sequence driven by an **Android** tester
+report rather than the Community WebView work, and touches neither `community.tsx` nor the
+injected CSS. Two fixes: `animation: 'none'` on the root `Stack` screenOptions and on each
+`Stack.Screen`, for a visible flash between routes on Android; and on the Academy landing
+header, `headerLogo` swapped from a fixed `height: 110` to `aspectRatio: 260/110` plus
+`maxHeight: 110` and `alignSelf: 'center'`, with `minHeight: '100%'` added to the scroll
+container, for a logo overlapping the subtitle. **Untested** — to be checked on Appetize
+before any build submission. The Community carousel and white-space state is unchanged
+from `.32`.
 
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
