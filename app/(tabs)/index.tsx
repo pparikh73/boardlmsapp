@@ -150,32 +150,35 @@ const styles = StyleSheet.create({
     backgroundColor: BRAND.white,
   },
   scroll: {
+    // flexGrow alone gives justifyContent:'center' a full-height box to centre
+    // within when the content fits. minHeight:'100%' was added in 2.116621.33
+    // for an overlap it did not fix and is redundant with flexGrow here, so it
+    // is removed rather than left as a second, differently-resolved height
+    // constraint on the same box.
     flexGrow: 1,
-    // minHeight pairs with flexGrow so justifyContent:'center' has a definite
-    // height to centre within on Android, where the content container could
-    // otherwise size to content and leave the layout shifted.
-    minHeight: '100%',
     paddingHorizontal: 24,
-    paddingTop: 40,
+    paddingTop: 20,
     paddingBottom: 24,
     justifyContent: 'center',
   },
   header: {
     alignItems: 'center',
-    marginBottom: 44,
+    marginBottom: 24,
   },
   headerLogo: {
-    width: 260,
-    // NOTE: with width fixed at 260, aspectRatio 260/110 derives a height of
-    // exactly 110 — identical to the fixed height it replaced — and maxHeight
-    // never binds. 260 also fits the content box on every phone width down to
-    // 320dp, so this is currently inert. It only starts doing work if width
-    // becomes relative (e.g. width: '100%', maxWidth: 260).
-    // 260/110 is the BOX ratio, not the asset's: the PNG is 1162x686 (1.694),
-    // so resizeMode="contain" renders it 186x110 with ~37dp of empty box each
-    // side. The box, not the visible logo, is what the subtitle lays out below.
-    aspectRatio: 260 / 110,
-    maxHeight: 110,
+    // Height-driven, using the asset's OWN ratio (the PNG is 1162x686 = 1.694),
+    // so the box hugs the artwork instead of reserving a 260x110 box that
+    // resizeMode="contain" only filled to 186x110 — that box wasted 37dp of
+    // width each side and, more importantly, 110dp of height for a wordmark.
+    //
+    // At height 72 the rendered width is ~122dp. Combined with the trimmed
+    // margins below this reclaims 94dp of fixed chrome, which is what kept the
+    // three login cards below the fold on a 640dp-tall screen: the content came
+    // to 564dp against roughly 556dp of usable height, so it overflowed even at
+    // default font scale, and justifyContent:'center' then pushed the cards down.
+    height: 72,
+    aspectRatio: 1162 / 686,
+    maxWidth: '100%',
     alignSelf: 'center',
     marginBottom: 8,
   },
@@ -213,7 +216,7 @@ const styles = StyleSheet.create({
     fontWeight: '300',
   },
   footer: {
-    marginTop: 40,
+    marginTop: 24,
     alignItems: 'center',
   },
   footerText: {

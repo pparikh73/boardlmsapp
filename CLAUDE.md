@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.34`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.35`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -168,6 +168,19 @@ makes the bar a nowrap flex row, returns absolutely-positioned **direct** childr
 (a deeper dropdown panel must stay absolute to open), and gives the logo
 `height: 22px; width: auto; max-width: 55%; flex-shrink: 1` with the right-hand controls at
 `flex-shrink: 0`. **Untested.**
+
+Version `2.116621.35` fixes excessive scrolling on the Academy landing screen, reported on
+the installed Android APK. `2.116621.34` could not have addressed it — that was injected CSS
+for Skilljar's web header *inside* the WebView, a different surface from this native screen.
+Measured against the current styles, the content came to **564dp against roughly 556dp of
+usable height** on a 640dp-tall device (screen minus status bar and the 60dp tab bar), so it
+overflowed at default font scale and `justifyContent: 'center'` then pushed the login cards
+below the fold. The fix reclaims **94dp of fixed chrome**: the logo is now height-driven at
+72dp using the asset's own 1162/686 ratio (the old 260x110 box reserved 110dp of height and
+37dp of width each side that `resizeMode="contain"` never filled), header `marginBottom`
+44→24, scroll `paddingTop` 40→20, footer `marginTop` 40→24. Content drops to 470dp, which
+clears the fold on a 640dp screen up to fontScale 1.5. The redundant `minHeight: '100%'`
+added in `.33` is removed. **Untested on device.**
 
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
