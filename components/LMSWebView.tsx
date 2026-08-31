@@ -432,7 +432,18 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
 
                     // Logo: height-driven so it scales instead of being clipped, and
                     // allowed to shrink to at most 55% of the bar.
-                    var logo = header.querySelector('img, svg');
+                    // NOT querySelector('img, svg') — that returns whichever comes
+                    // FIRST in document order, which on this header could easily be
+                    // the language selector's globe icon rather than the logo, and
+                    // we would then shrink the globe to 22px and hand the logo's
+                    // flex treatment to the wrong subtree. Take the widest instead:
+                    // a wordmark is always wider than an icon.
+                    var logo = null, bcWidest = 0;
+                    var bcCands = header.querySelectorAll('img, svg');
+                    for (var c = 0; c < bcCands.length; c++) {
+                      var cw = bcCands[c].getBoundingClientRect().width;
+                      if (cw > bcWidest) { bcWidest = cw; logo = bcCands[c]; }
+                    }
                     if (logo) {
                       logo.style.setProperty('height', '22px', 'important');
                       logo.style.setProperty('width', 'auto', 'important');
