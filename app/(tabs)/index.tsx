@@ -166,11 +166,14 @@ const styles = StyleSheet.create({
   },
   headerLogo: {
     width: 260,
-    // aspectRatio instead of a fixed height: on Android the fixed 110 did not
-    // account for the image's intrinsic ratio once width was constrained by the
-    // parent, so the laid-out box overlapped the subtitle below. 260/110 is the
-    // asset's own ratio, and maxHeight keeps it from exceeding the old height on
-    // a narrower screen where width resolves below 260.
+    // NOTE: with width fixed at 260, aspectRatio 260/110 derives a height of
+    // exactly 110 — identical to the fixed height it replaced — and maxHeight
+    // never binds. 260 also fits the content box on every phone width down to
+    // 320dp, so this is currently inert. It only starts doing work if width
+    // becomes relative (e.g. width: '100%', maxWidth: 260).
+    // 260/110 is the BOX ratio, not the asset's: the PNG is 1162x686 (1.694),
+    // so resizeMode="contain" renders it 186x110 with ~37dp of empty box each
+    // side. The box, not the visible logo, is what the subtitle lays out below.
     aspectRatio: 260 / 110,
     maxHeight: 110,
     alignSelf: 'center',
