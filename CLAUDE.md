@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.35`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.36`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -181,6 +181,24 @@ below the fold. The fix reclaims **94dp of fixed chrome**: the logo is now heigh
 44→24, scroll `paddingTop` 40→20, footer `marginTop` 40→24. Content drops to 470dp, which
 clears the fold on a 640dp screen up to fontScale 1.5. The redundant `minHeight: '100%'`
 added in `.33` is removed. **Untested on device.**
+
+Version `2.116621.36` carries three fixes. **Auth screen logo**: `width: '80%'` capped at
+`maxWidth: 260` with `maxHeight: 120`, so it renders ~203x120 instead of 122x72. Note this
+adds 48dp back to the landing screen and the content now fits a 640dp screen only up to
+about fontScale 1.2 — the `.35` headroom is spent, so trim elsewhere before adding more.
+**Skilljar navbar logo**: a stylesheet rule for `.site-logo img`, `.navbar-brand img`,
+`.sj-navbar__logo img`, `.sj-header__logo img` at `min-height: 36px; max-height: 48px`.
+The `.34` JS header pass was changed to match, because it previously set an inline
+`height: 22px !important` and **an inline `!important` outranks a stylesheet `!important`**
+— it would have made the new rule inert on the element it targets.
+**Navigation flash**: `animation: 'none'` in `.33` fixed only the Stack. Three separate
+causes were found: the Tabs navigator animates by default in
+`@react-navigation/bottom-tabs` 7.x and was never covered; `router.replace('/(tabs)')` ran
+from an effect after mount, so the Stack rendered a default route then immediately
+transitioned (replaced by `unstable_settings = { initialRouteName: '(tabs)' }`); and the
+"text panel popping open" was `index.tsx` rendering the landing cards while the async
+`getSession()` read was in flight after an SSO login, fixed by a synchronous session cache
+in `services/auth.ts` that the screen seeds its state from. **Untested on device.**
 
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track

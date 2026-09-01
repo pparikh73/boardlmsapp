@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack } from 'expo-router';
 import Head from 'expo-router/head';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -11,15 +11,20 @@ import { BRAND } from '../constants/skilljar';
 // Keep splash visible while checking auth state
 SplashScreen.preventAutoHideAsync();
 
+// Declare (tabs) as the initial route rather than navigating to it from an effect.
+// The previous router.replace('/(tabs)') ran after mount, so the Stack rendered its
+// default route first and then immediately transitioned — an extra navigation on
+// every cold start, and one of the three sources of the flash TJ reported.
+export const unstable_settings = { initialRouteName: '(tabs)' };
+
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     async function prepare() {
-      await getSession(); // warm the session cache
+      await getSession(); // warm the session cache before anything renders
       await SplashScreen.hideAsync();
       setReady(true);
-      router.replace('/(tabs)'); // tabs always show; each tab handles its own auth state
     }
     prepare();
   }, []);

@@ -211,6 +211,16 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 // loading state runs, before it inserts the actual <video> element —
                 // give it a white background instead for a less jarring transition.
                 rules.push('.scorm-lesson-content, .scorm-lesson-content iframe, iframe { background-color: #ffffff !important; }');
+                // Skilljar navbar logo — it rendered small next to the language
+                // selector. Four selectors because Skilljar's theme markup varies;
+                // whichever one matches wins, and the JS header pass above applies
+                // the same sizing to the widest img/svg it finds as a fallback for
+                // when none of these match.
+                rules.push('.site-logo img, .navbar-brand img, .sj-navbar__logo img, .sj-header__logo img {' +
+                           ' min-height: 36px !important;' +
+                           ' max-height: 48px !important;' +
+                           ' width: auto !important;' +
+                           ' object-fit: contain !important; }');
                 style.innerHTML = rules.join('');
                 document.head.appendChild(style);
               } catch (e) {}
@@ -445,7 +455,13 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                       if (cw > bcWidest) { bcWidest = cw; logo = bcCands[c]; }
                     }
                     if (logo) {
-                      logo.style.setProperty('height', '22px', 'important');
+                      // Sized to agree with the .site-logo/.navbar-brand rule in the
+                      // stylesheet below. These MUST match: an inline !important
+                      // declaration outranks a stylesheet !important one, so a hard
+                      // height here would silently make that rule inert.
+                      logo.style.setProperty('height', 'auto', 'important');
+                      logo.style.setProperty('min-height', '36px', 'important');
+                      logo.style.setProperty('max-height', '48px', 'important');
                       logo.style.setProperty('width', 'auto', 'important');
                       logo.style.setProperty('max-width', '55%', 'important');
                       logo.style.setProperty('flex-shrink', '1', 'important');

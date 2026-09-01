@@ -79,20 +79,37 @@ export async function loginWithGuest(email: string, password: string): Promise<{
   }
 }
 
+// In-memory mirror of the persisted session. SecureStore is async-only, so
+// without this every screen that gates on auth state has to render something
+// while the read is in flight — which is how the login screen's text panel
+// flashed after an SSO login (see app/(tabs)/index.tsx). undefined means "not
+// read yet"; null means "read, and there is no session".
+let cachedSession: Session | null | undefined = undefined;
+
+/** Synchronous read of the last known session. undefined = not yet determined. */
+export function getCachedSession(): Session | null | undefined {
+  return cachedSession;
+}
+
 export async function logout(): Promise<void> {
+  cachedSession = null;
   await SecureStore.deleteItemAsync(SESSION_STORE_KEY);
 }
 
 export async function getSession(): Promise<Session | null> {
   try {
     const raw = await SecureStore.getItemAsync(SESSION_STORE_KEY);
-    return raw ? (JSON.parse(raw) as Session) : null;
+    cachedSession = raw ? (JSON.parse(raw) as Session) : null;
+    return cachedSession;
   } catch {
+    cachedSession = null;
     return null;
   }
 }
 
 async function saveSession(session: Session): Promise<void> {
+  // Set before the await so a screen that renders on the next tick already sees it.
+  cachedSession = session;
   await SecureStore.setItemAsync(SESSION_STORE_KEY, JSON.stringify(session));
 }
 

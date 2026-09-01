@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, router, useNavigation } from 'expo-router';
 import LMSWebView, { LMSWebViewHandle } from '../../components/LMSWebView';
-import { getSession, logout, type Session } from '../../services/auth';
+import { getSession, getCachedSession, logout, type Session } from '../../services/auth';
 import { BRAND, AUTH_URLS, TAB_URLS, SUPPORT_EMAIL } from '../../constants/skilljar';
 
 // Colors for the auth cards — derived from Board brand assets
@@ -28,7 +28,13 @@ const CARD_COLORS = {
 };
 
 export default function AcademyTab() {
-  const [session, setSession] = useState<Session | null | undefined>(undefined);
+  // Seeded from the synchronous cache, not undefined. getSession() always hits
+  // SecureStore asynchronously, so after an SSO login — where sso-webview saves the
+  // session and replaces to (tabs) — this screen used to focus holding its stale
+  // null, render the landing text panel with the three cards, and only swap to the
+  // WebView once the async read resolved. That flash is TJ's "text panel briefly
+  // pops open", and it recurred on every focus where the state was stale.
+  const [session, setSession] = useState<Session | null | undefined>(getCachedSession);
   const [isFocused, setIsFocused] = useState(true);
   const lmsRef = useRef<LMSWebViewHandle>(null);
   const navigation = useNavigation();
@@ -166,19 +172,18 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   headerLogo: {
-    // Height-driven, using the asset's OWN ratio (the PNG is 1162x686 = 1.694),
-    // so the box hugs the artwork instead of reserving a 260x110 box that
-    // resizeMode="contain" only filled to 186x110 — that box wasted 37dp of
-    // width each side and, more importantly, 110dp of height for a wordmark.
+    // Requested as "replace width:260 / maxHeight:110" — those were the 2.116621.34
+    // values; .35 had already moved to height:72 + aspectRatio. Applied to the
+    // current style with the same intent: a relative width so it scales with the
+    // screen, capped at 260, and a taller ceiling so it does not read small.
     //
-    // At height 72 the rendered width is ~122dp. Combined with the trimmed
-    // margins below this reclaims 94dp of fixed chrome, which is what kept the
-    // three login cards below the fold on a 640dp-tall screen: the content came
-    // to 564dp against roughly 556dp of usable height, so it overflowed even at
-    // default font scale, and justifyContent:'center' then pushed the cards down.
-    height: 72,
+    // aspectRatio is the asset's own (1162x686). With width 80% of the content box
+    // the derived height exceeds 120 on every phone, so maxHeight binds and Yoga
+    // back-solves the width — the logo renders about 203x120 rather than 122x72.
+    width: '80%',
+    maxWidth: 260,
+    maxHeight: 120,
     aspectRatio: 1162 / 686,
-    maxWidth: '100%',
     alignSelf: 'center',
     marginBottom: 8,
   },

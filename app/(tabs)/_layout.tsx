@@ -14,6 +14,10 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        // @react-navigation/bottom-tabs 7.x animates tab changes by default.
+        // 2.116621.33 set animation:'none' on the Stack only, so tab switches were
+        // never covered — this is one of the three sources of the flash.
+        animation: 'none',
         tabBarActiveTintColor: ACTIVE,
         tabBarInactiveTintColor: INACTIVE,
         tabBarStyle: {
