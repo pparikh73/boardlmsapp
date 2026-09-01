@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.36`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.37`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -199,6 +199,19 @@ transitioned (replaced by `unstable_settings = { initialRouteName: '(tabs)' }`);
 "text panel popping open" was `index.tsx` rendering the landing cards while the async
 `getSession()` read was in flight after an SSO login, fixed by a synchronous session cache
 in `services/auth.ts` that the screen seeds its state from. **Untested on device.**
+
+Version `2.116621.37` re-fixes all three of `.36`'s items after device testing. **Logo**:
+`maxHeight` 120→80, `width` '80%'→'70%', `maxWidth` 260→240, giving ~136x80 and putting the
+content at 478dp, inside the fold up to fontScale 1.5. **Skilljar navbar logo**: the four
+class selectors never matched, so the stylesheet rule is deleted and every `<img>` inside
+`findFixedHeader()` is now sized in JS — no class name is guessed. `setProperty(...,
+'important')` rather than plain assignment, since a plain inline declaration still loses to
+the site's own `!important` rules. **Navigation flash**: the `.36` cache fix was
+incomplete — it seeded `useState` from the cache, but `index.tsx` is a persistent tab that
+never unmounts, so that initialiser ran once and the state stayed stale. The cache is now
+read synchronously on **every focus**, and the async reconcile only commits a materially
+different value (`getSession()` JSON.parses a fresh object each call, so it used to
+re-render on every focus for nothing).
 
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track

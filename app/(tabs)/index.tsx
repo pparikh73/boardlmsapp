@@ -42,7 +42,23 @@ export default function AcademyTab() {
   useFocusEffect(
     useCallback(() => {
       setIsFocused(true);
-      getSession().then(setSession);
+      // Read the cache SYNCHRONOUSLY on every focus, not just at mount. The .36
+      // fix seeded useState from the cache, but this screen is a persistent tab
+      // that never unmounts, so that initialiser runs once and the state stayed
+      // stale. After a guest or SSO login the cache is already correct (saveSession
+      // sets it before its await), so this lands the right view in the same frame
+      // the screen regains focus — no window where the landing panel can render.
+      const cached = getCachedSession();
+      if (cached !== undefined) setSession(cached);
+      // Reconcile with storage, but only commit a genuinely different value:
+      // getSession() JSON.parses a fresh object every call, so assigning it
+      // unconditionally re-rendered on every focus for no reason, which is itself
+      // a flash contributor during a transition.
+      getSession().then((fresh) => {
+        setSession((prev) =>
+          JSON.stringify(prev ?? null) === JSON.stringify(fresh ?? null) ? prev : fresh,
+        );
+      });
       return () => setIsFocused(false);
     }, []),
   );
@@ -178,11 +194,11 @@ const styles = StyleSheet.create({
     // screen, capped at 260, and a taller ceiling so it does not read small.
     //
     // aspectRatio is the asset's own (1162x686). With width 80% of the content box
-    // the derived height exceeds 120 on every phone, so maxHeight binds and Yoga
-    // back-solves the width — the logo renders about 203x120 rather than 122x72.
-    width: '80%',
-    maxWidth: 260,
-    maxHeight: 120,
+    // the derived height still exceeds maxHeight on every phone, so maxHeight binds
+    // and Yoga back-solves the width — the logo renders about 135x80.
+    width: '70%',
+    maxWidth: 240,
+    maxHeight: 80,
     aspectRatio: 1162 / 686,
     alignSelf: 'center',
     marginBottom: 8,

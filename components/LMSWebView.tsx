@@ -211,16 +211,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 // loading state runs, before it inserts the actual <video> element —
                 // give it a white background instead for a less jarring transition.
                 rules.push('.scorm-lesson-content, .scorm-lesson-content iframe, iframe { background-color: #ffffff !important; }');
-                // Skilljar navbar logo — it rendered small next to the language
-                // selector. Four selectors because Skilljar's theme markup varies;
-                // whichever one matches wins, and the JS header pass above applies
-                // the same sizing to the widest img/svg it finds as a fallback for
-                // when none of these match.
-                rules.push('.site-logo img, .navbar-brand img, .sj-navbar__logo img, .sj-header__logo img {' +
-                           ' min-height: 36px !important;' +
-                           ' max-height: 48px !important;' +
-                           ' width: auto !important;' +
-                           ' object-fit: contain !important; }');
                 style.innerHTML = rules.join('');
                 document.head.appendChild(style);
               } catch (e) {}
@@ -442,30 +432,34 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
 
                     // Logo: height-driven so it scales instead of being clipped, and
                     // allowed to shrink to at most 55% of the bar.
-                    // NOT querySelector('img, svg') — that returns whichever comes
-                    // FIRST in document order, which on this header could easily be
-                    // the language selector's globe icon rather than the logo, and
-                    // we would then shrink the globe to 22px and hand the logo's
-                    // flex treatment to the wrong subtree. Take the widest instead:
-                    // a wordmark is always wider than an icon.
+                    // Every <img> in the fixed header, sized directly in JS. The
+                    // 2.116621.36 attempt did this through a stylesheet keyed on
+                    // .site-logo / .navbar-brand / .sj-navbar__logo / .sj-header__logo
+                    // and none of those matched Skilljar's actual markup, so the rule
+                    // was inert. Driving it off findFixedHeader() instead means no
+                    // class name has to be guessed.
+                    //
+                    // setProperty(..., 'important') rather than a plain style.minHeight
+                    // assignment: a plain inline declaration still loses to the site's
+                    // own !important rules, which is a likely reason the logo was
+                    // constrained in the first place.
+                    var bcImgs = header.getElementsByTagName('img');
+                    for (var n = 0; n < bcImgs.length; n++) {
+                      bcImgs[n].style.setProperty('min-height', '36px', 'important');
+                      bcImgs[n].style.setProperty('width', 'auto', 'important');
+                      bcImgs[n].style.setProperty('object-fit', 'contain', 'important');
+                    }
+                    // The logo is the widest image; used below to decide which direct
+                    // child of the header is the logo's host rather than the controls.
                     var logo = null, bcWidest = 0;
-                    var bcCands = header.querySelectorAll('img, svg');
-                    for (var c = 0; c < bcCands.length; c++) {
-                      var cw = bcCands[c].getBoundingClientRect().width;
-                      if (cw > bcWidest) { bcWidest = cw; logo = bcCands[c]; }
+                    for (var c2 = 0; c2 < bcImgs.length; c2++) {
+                      var cw = bcImgs[c2].getBoundingClientRect().width;
+                      if (cw > bcWidest) { bcWidest = cw; logo = bcImgs[c2]; }
                     }
                     if (logo) {
-                      // Sized to agree with the .site-logo/.navbar-brand rule in the
-                      // stylesheet below. These MUST match: an inline !important
-                      // declaration outranks a stylesheet !important one, so a hard
-                      // height here would silently make that rule inert.
-                      logo.style.setProperty('height', 'auto', 'important');
-                      logo.style.setProperty('min-height', '36px', 'important');
                       logo.style.setProperty('max-height', '48px', 'important');
-                      logo.style.setProperty('width', 'auto', 'important');
                       logo.style.setProperty('max-width', '55%', 'important');
                       logo.style.setProperty('flex-shrink', '1', 'important');
-                      logo.style.setProperty('object-fit', 'contain', 'important');
                     }
 
                     // Find which direct child of the header contains the logo; every
