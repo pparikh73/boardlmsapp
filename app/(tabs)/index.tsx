@@ -179,13 +179,13 @@ const styles = StyleSheet.create({
     // constraint on the same box.
     flexGrow: 1,
     paddingHorizontal: 24,
-    paddingTop: 20,
+    paddingTop: 10,
     paddingBottom: 24,
     justifyContent: 'center',
   },
   header: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 12,
   },
   headerLogo: {
     // Requested as "replace width:260 / maxHeight:110" — those were the 2.116621.34
@@ -195,10 +195,10 @@ const styles = StyleSheet.create({
     //
     // aspectRatio is the asset's own (1162x686). With width 80% of the content box
     // the derived height still exceeds maxHeight on every phone, so maxHeight binds
-    // and Yoga back-solves the width — the logo renders about 135x80.
+    // and Yoga back-solves the width — the logo renders about 102x60.
     width: '70%',
     maxWidth: 240,
-    maxHeight: 80,
+    maxHeight: 60,
     aspectRatio: 1162 / 686,
     alignSelf: 'center',
     marginBottom: 8,

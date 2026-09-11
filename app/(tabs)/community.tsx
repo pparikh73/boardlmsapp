@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, StatusBar, Linking } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, StatusBar, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { WebView, WebViewRequest } from 'react-native-webview';
+import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
 import { useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -16,6 +16,7 @@ import { COMMUNITY_DIAGNOSTIC_JS } from '../../constants/communityDiagnostic';
 
 export default function CommunityTab() {
   const webViewRef = useRef<WebView>(null);
+  const lastBouncedRef = useRef<string | null>(null);
   const navigation = useNavigation();
 
   // Tapping the Community tab while already on it reloads to the home page
@@ -43,10 +44,39 @@ export default function CommunityTab() {
       Linking.openURL(url).catch(() => {});
       return false;
     }
+    // ANDROID: stop here — this callback blocks the WebView thread for up to 250ms
+    // per navigation and has no isTopFrame. The allowlist is enforced in
+    // handleNavigationChange instead. See LMSWebView.tsx for the full reasoning.
+    if (Platform.OS === 'android') return true;
     // Restrict to Board/Community domains so Apple rates the app 4+ (not 17+)
     if (isAllowedWebViewUrl(url)) return true;
     Linking.openURL(url).catch(() => {});
     return false;
+  }
+
+  // Android-side allowlist enforcement: non-blocking, and only fires for committed
+  // top-level navigation. An off-domain page is still never browsable in-app — it is
+  // stopped and handed to the system browser one frame later instead of being
+  // refused up front, so the age-rating guarantee is preserved.
+  function handleNavigationChange(nav: WebViewNavigation) {
+    if (Platform.OS !== 'android') return;
+    if (!nav.url || !/^https?:/i.test(nav.url)) return;
+    if (isAllowedWebViewUrl(nav.url)) {
+      lastBouncedRef.current = null;
+      return;
+    }
+    // A single navigation emits several state changes; only act on the first.
+    if (lastBouncedRef.current === nav.url) return;
+    lastBouncedRef.current = nav.url;
+    webViewRef.current?.stopLoading();
+    Linking.openURL(nav.url).catch(() => {});
+    if (nav.canGoBack) {
+      webViewRef.current?.goBack();
+    } else {
+      webViewRef.current?.injectJavaScript(
+        `window.location.href = '${COMMUNITY_BASE_URL}'; true;`
+      );
+    }
   }
 
   return (
@@ -87,6 +117,7 @@ export default function CommunityTab() {
         // through wherever the page itself doesn't paint.
         style={styles.webview}
         onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
+        onNavigationStateChange={handleNavigationChange}
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
         overScrollMode="never"

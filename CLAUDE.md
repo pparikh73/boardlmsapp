@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.38`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.39`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -244,6 +244,24 @@ parses the hostname (stripping userinfo, so `https://academy.board.com@evil.exam
 correctly blocked) and matches by equality or dot-suffix. The domain constants lost their
 leading dots as part of this. **Untested on device.**
 
+Version `2.116621.39` carries three fixes. **Landing screen**: logo `maxHeight` 80→60,
+scroll `paddingTop` 20→10, header `marginBottom` 24→12. The logo renders ~102x60 and the
+content comes to 436dp against roughly 556dp usable, clearing the fold up to fontScale 1.7.
+**Search freeze (structural)**: the `.38` mitigations were not enough, so allowlist
+enforcement now moves off the blocking callback on Android. `onShouldStartLoadWithRequest`
+returns `true` immediately for any http(s) URL on Android after scheme handling, and
+`onNavigationStateChange` — non-blocking, top-level only — stops an off-domain page,
+hands it to the system browser and returns to allowed content. iOS keeps the inline check,
+where `decidePolicyForNavigationAction` is async and `isTopFrame` is real. **The age-rating
+guarantee is preserved**: an off-domain page is still never browsable in-app, it is bounced
+one frame later rather than refused up front. `community.tsx` gained an
+`onNavigationStateChange` for the same purpose; it previously had none.
+**Academy navbar logo**: `min-height` 36→40px on every `<img>` in the header, plus a
+fallback for when `findFixedHeader()` returns null — it only matches `position: fixed` or
+`sticky`, so if Skilljar's navbar is statically positioned that whole pass never ran, which
+would explain the logo staying small through `.34`, `.36` and `.37`. The fallback looks for
+a `header`, `[role="banner"]` or `nav` near the top that actually contains an image.
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -338,6 +356,12 @@ been started yet.
   `isTopFrame === false` guard above is an iOS-only optimisation. Keep this handler cheap
   and never let it reach `Linking.openURL` for in-page schemes: on Android that is an
   Intent resolution, and a widget navigating per keystroke will ANR the app.
+- **Android allowlist enforcement lives in `onNavigationStateChange`, not
+  `onShouldStartLoadWithRequest`.** The latter blocks the Android WebView thread and cannot
+  see `isTopFrame`; the former is non-blocking and fires only for committed top-level
+  navigation. iOS keeps the inline check. Both paths bounce off-domain pages to the system
+  browser, so the 4+ age-rating answer is unchanged — do not "simplify" this back into one
+  shared handler.
 - **Anything on a `MutationObserver` must be cheap and coalesced.** These sites mutate the
   DOM on every keystroke. Cache negative lookups as well as positive ones — caching only
   the hit is what made `findFixedHeader()` re-walk the whole document per mutation — and

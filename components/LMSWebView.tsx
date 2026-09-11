@@ -36,9 +36,42 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
       }
     }, [isFocused]);
 
+    // Last URL bounced, so the multiple onNavigationStateChange events a single
+    // navigation produces (loading true, then false) are only acted on once.
+    const lastBouncedRef = useRef<string | null>(null);
+
     function handleNavigationChange(nav: WebViewNavigation) {
       if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
         onLogout?.();
+      }
+
+      // ANDROID allowlist enforcement lives here, not in onShouldStartLoadWithRequest.
+      // That callback BLOCKS the Android WebView thread for up to 250ms per navigation
+      // (RNCWebViewClient.shouldOverrideUrlLoading waits on a lock) and carries no
+      // isTopFrame, so it cannot tell a sub-frame load from a real navigation — which
+      // is what made typing in Skilljar's search field hang the app. This callback is
+      // non-blocking and only reports committed TOP-LEVEL navigation, so the same
+      // guarantee is enforced without stalling the thread.
+      //
+      // The age-rating guarantee is preserved, not weakened: an off-domain page is
+      // still never browsable in-app. It is stopped and handed to the system browser
+      // on the first state change, which is the same outcome, one frame later.
+      if (Platform.OS !== 'android') return;
+      if (!nav.url || !/^https?:/i.test(nav.url)) return;
+      if (isAllowedWebViewUrl(nav.url)) {
+        lastBouncedRef.current = null;
+        return;
+      }
+      if (lastBouncedRef.current === nav.url) return;
+      lastBouncedRef.current = nav.url;
+      webViewRef.current?.stopLoading();
+      Linking.openURL(nav.url).catch(() => {});
+      // Return to allowed content rather than leaving a blank stopped page: go back
+      // if there is history, otherwise reload the tab's own URL.
+      if (nav.canGoBack) {
+        webViewRef.current?.goBack();
+      } else {
+        webViewRef.current?.injectJavaScript(`window.location.href = '${url}'; true;`);
       }
     }
 
@@ -55,11 +88,18 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
       // widgets (search autocomplete especially) navigate to about:blank / blob:
       // routinely — one per keystroke was a large part of the search freeze.
       if (/^(about|blob|data|javascript|file):/i.test(url)) return true;
-      // Genuine external schemes (mailto:, tel:) still hand off to the OS.
+      // Genuine external schemes (mailto:, tel:) still hand off to the OS. Kept on
+      // both platforms: these are rare and deliberate, not per-keystroke traffic.
       if (!/^https?:/i.test(url)) {
         Linking.openURL(url).catch(() => {});
         return false;
       }
+      // ANDROID: stop here. This callback blocks the WebView thread, so it does the
+      // cheapest possible thing for http(s) and defers the allowlist to
+      // handleNavigationChange above, which is non-blocking and top-frame only.
+      if (Platform.OS === 'android') return true;
+      // iOS: enforce inline. decidePolicyForNavigationAction is async and the event
+      // carries a real isTopFrame, so neither problem applies here.
       // Restrict to Board/Skilljar domains so Apple rates the app 4+ (not 17+)
       if (isAllowedWebViewUrl(url)) return true;
       Linking.openURL(url).catch(() => {});
@@ -444,6 +484,24 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 try {
                   function fixHeaderOverlap() {
                     var header = findFixedHeader();
+                    if (!header) {
+                      // Fallback. findFixedHeader() only matches a position:fixed or
+                      // :sticky bar — if Skilljar's navbar is statically positioned it
+                      // returns null and this entire pass never ran, which would explain
+                      // the logo staying small through .34, .36 and .37 despite three
+                      // different sizing attempts. Look for a semantic header near the
+                      // top that actually contains an image. Scoped to three tag names
+                      // rather than '*', so it stays cheap enough for the mutation path.
+                      var bcCand = document.querySelectorAll('header, [role="banner"], nav');
+                      for (var q = 0; q < bcCand.length; q++) {
+                        var qr = bcCand[q].getBoundingClientRect();
+                        if (qr.top <= 120 && qr.height > 0 && qr.height < 200 &&
+                            bcCand[q].getElementsByTagName('img').length > 0) {
+                          header = bcCand[q];
+                          break;
+                        }
+                      }
+                    }
                     if (!header) return;
 
                     // The row has to be a nowrap flex line for shrink factors to mean
@@ -480,7 +538,7 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                     // constrained in the first place.
                     var bcImgs = header.getElementsByTagName('img');
                     for (var n = 0; n < bcImgs.length; n++) {
-                      bcImgs[n].style.setProperty('min-height', '36px', 'important');
+                      bcImgs[n].style.setProperty('min-height', '40px', 'important');
                       bcImgs[n].style.setProperty('width', 'auto', 'important');
                       bcImgs[n].style.setProperty('object-fit', 'contain', 'important');
                     }
