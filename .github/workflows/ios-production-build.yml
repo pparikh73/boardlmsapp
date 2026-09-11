@@ -68,6 +68,29 @@ jobs:
             exit 1
           fi
 
+      # A profile only configures one platform in some cases, and EAS does not warn
+      # about the mismatch — it just builds the OTHER platform and fails in its
+      # credentials step with a message that names neither input. Dispatching
+      # android-apk while `platform` sat at its default of ios produced
+      # "couldn't find any credentials suitable for internal distribution in
+      # non-interactive mode", which comes from eas-cli's iOS
+      # SetUpInternalProvisioningProfile and is about an ad-hoc provisioning
+      # profile, not the Android keystore it looked like.
+      - name: Reject incompatible platform/profile combinations
+        if: >-
+          (inputs.profile == 'android-apk' && inputs.platform != 'android') ||
+          (inputs.profile == 'appetize' && inputs.platform != 'ios')
+        run: |
+          echo "::error::Profile '${{ inputs.profile }}' does not support platform '${{ inputs.platform }}'."
+          if [ "${{ inputs.profile }}" = "android-apk" ]; then
+            echo "android-apk configures only eas.json build.android-apk.android — dispatch it with platform: android."
+          fi
+          if [ "${{ inputs.profile }}" = "appetize" ]; then
+            echo "appetize configures only eas.json build.appetize.ios (simulator) — dispatch it with platform: ios."
+          fi
+          echo "Note: the platform input defaults to ios, so it must be changed explicitly for Android builds."
+          exit 1
+
       # Submission is deliberately narrower than building. Android needs a Google
       # Play service-account JSON that is not wired up as a secret, and the ASC key
       # staging below reads submit.production.* from eas.json, so only the
