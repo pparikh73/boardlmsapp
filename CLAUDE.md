@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.37`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.38`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -213,6 +213,37 @@ read synchronously on **every focus**, and the async reconcile only commits a ma
 different value (`getSession()` JSON.parses a fresh object each call, so it used to
 re-render on every focus for nothing).
 
+Version `2.116621.38` fixes the Android-only search freeze on `academy.board.com` (typing in
+the search field made the app unresponsive; iOS was fine) plus a domain-allowlist bypass.
+Two independent causes, both Android-specific:
+
+1. **`onShouldStartLoadWithRequest` blocks the Android WebView thread.**
+   `RNCWebViewClient.shouldOverrideUrlLoading` waits on a lock for up to
+   `SHOULD_OVERRIDE_URL_LOADING_TIMEOUT = 250` ms per navigation; iOS's
+   `decidePolicyForNavigationAction` is async and never blocks. Worse, Android's
+   `createWebViewEvent()` does **not** include `isTopFrame` (the `WebResourceRequest`
+   overload discards `request.isForMainFrame()`), so the `isTopFrame === false` early
+   return **only ever works on iOS** — every sub-frame navigation fell through to the
+   allowlist, and anything not on it hit `Linking.openURL`, firing an Android Intent
+   resolution per keystroke. Fixed by allowing in-page schemes
+   (`about:`/`blob:`/`data:`/`javascript:`/`file:`) to load in the WebView and never
+   passing them to `Linking`.
+2. **Two unthrottled full-DOM scans per mutation.** `padForFixedHeader` and
+   `fixHeaderOverlap` both ran on a `MutationObserver`, and `findFixedHeader()` cached only
+   a *hit* — a page with no qualifying fixed header re-walked every element calling
+   `getComputedStyle` on each, on every mutation, and search autocomplete mutates the DOM
+   on every keystroke. Misses are now cached for 2s, and every observer/scroll/resize
+   callback is coalesced through one `requestAnimationFrame` guard, so a burst costs at
+   most one pass per frame. Applied to `community.tsx` as well — same pattern, same risk.
+
+**Allowlist bypass**: `ALLOWED_WEBVIEW_DOMAINS.some(d => url.includes(d))` was a substring
+test that accepted `https://evil.example/?ref=.board.com` and
+`https://notreally.board.com.attacker.net/` while rejecting the legitimate bare
+`https://board.com/`. Replaced by `isAllowedWebViewUrl()` in `constants/skilljar.ts`, which
+parses the hostname (stripping userinfo, so `https://academy.board.com@evil.example/` is
+correctly blocked) and matches by equality or dot-suffix. The domain constants lost their
+leading dots as part of this. **Untested on device.**
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -301,6 +332,17 @@ been started yet.
   `rightControls`/language-selector component that exists on no branch. The fix belonged in
   injected CSS. Prefer driving such fixes off a measured element (e.g. `findFixedHeader()`)
   over the site's build-generated class names, which change on deploy.
+- **`onShouldStartLoadWithRequest` behaves completely differently on Android.** It is a
+  *blocking* call there — `RNCWebViewClient.shouldOverrideUrlLoading` waits on a lock up to
+  250 ms per navigation — and the event carries **no `isTopFrame`**, so the
+  `isTopFrame === false` guard above is an iOS-only optimisation. Keep this handler cheap
+  and never let it reach `Linking.openURL` for in-page schemes: on Android that is an
+  Intent resolution, and a widget navigating per keystroke will ANR the app.
+- **Anything on a `MutationObserver` must be cheap and coalesced.** These sites mutate the
+  DOM on every keystroke. Cache negative lookups as well as positive ones — caching only
+  the hit is what made `findFixedHeader()` re-walk the whole document per mutation — and
+  route observer, scroll and resize callbacks through a single `requestAnimationFrame`
+  guard (`bcSchedule`) rather than calling the work directly.
 - **Every injected-JS fix should be wrapped in its own `try/catch`.** Sites change their
   DOM shape without notice; one throwing selector shouldn't silently abort every other
   fix in the same injection block.

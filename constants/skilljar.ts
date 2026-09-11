@@ -99,7 +99,50 @@ export const WEBVIEW_USER_AGENT = Platform.select({
 
 // Domains allowed to load in-app; anything else opens in the system browser.
 // Keeps "Unrestricted web access" truthfully answered "No" for Apple's 4+ age rating.
-export const ALLOWED_WEBVIEW_DOMAINS = ['.board.com', '.skilljar.com', '.skilljar.app', '.vanillacommunities.com'];
+// Registrable domains allowed to load as top-level navigation in the WebViews.
+// Stored WITHOUT a leading dot: matching is hostname-based (see isAllowedWebViewUrl),
+// so a bare "board.com" is matched by equality and subdomains by suffix.
+export const ALLOWED_WEBVIEW_DOMAINS = ['board.com', 'skilljar.com', 'skilljar.app', 'vanillacommunities.com'];
+
+/**
+ * Hostname of a URL, lowercased, or null if it has no authority component.
+ *
+ * Hand-parsed rather than using `new URL()`: React Native's URL is a partial
+ * polyfill and `.hostname` is not dependable across platforms.
+ *
+ * Userinfo is stripped deliberately — `https://academy.board.com@evil.example/`
+ * has a hostname of evil.example, and reading the part before the "@" is the
+ * classic way to get a naive check to accept an attacker's host.
+ */
+export function getHostname(url: string): string | null {
+  const m = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\/([^/?#]*)/.exec(url);
+  if (!m) return null;
+  let authority = m[1];
+  const at = authority.lastIndexOf('@');
+  if (at !== -1) authority = authority.slice(at + 1);
+  if (authority.startsWith('[')) {
+    const end = authority.indexOf(']'); // IPv6 literal
+    return end === -1 ? null : authority.slice(0, end + 1).toLowerCase();
+  }
+  const colon = authority.indexOf(':');
+  if (colon !== -1) authority = authority.slice(0, colon); // strip port
+  return authority.toLowerCase() || null;
+}
+
+/**
+ * Whether a URL may load as top-level navigation inside the WebViews.
+ *
+ * Replaces a substring test (`url.includes('.board.com')`), which accepted any
+ * URL merely CONTAINING the string — `https://evil.example/?ref=.board.com` and
+ * `https://notreally.board.com.attacker.net/` both passed — while rejecting the
+ * legitimate bare `https://board.com/`. This is the check Apple's 4+ age rating
+ * rests on, so it matches on the parsed hostname only.
+ */
+export function isAllowedWebViewUrl(url: string): boolean {
+  const host = getHostname(url);
+  if (!host) return false;
+  return ALLOWED_WEBVIEW_DOMAINS.some((d) => host === d || host.endsWith('.' + d));
+}
 
 // Board Visual Identity Guidelines v3.0 — May 2024
 // Primary color (standalone use always permitted)

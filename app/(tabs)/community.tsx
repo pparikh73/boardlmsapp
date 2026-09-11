@@ -10,7 +10,7 @@ import {
   COMMUNITY_DIAGNOSTICS,
   BRAND,
   WEBVIEW_USER_AGENT,
-  ALLOWED_WEBVIEW_DOMAINS,
+  isAllowedWebViewUrl,
 } from '../../constants/skilljar';
 import { COMMUNITY_DIAGNOSTIC_JS } from '../../constants/communityDiagnostic';
 
@@ -33,12 +33,18 @@ export default function CommunityTab() {
     // Only restrict top-level (user-initiated) navigation — see LMSWebView.tsx for why
     // iframe sub-resource loads must be allowed regardless of domain.
     if ((request as any).isTopFrame === false) return true;
-    if (!url.startsWith('http')) {
+    // In-page schemes must load in the WebView and must NEVER reach Linking.
+    // On Android every Linking.openURL fires an Intent resolution, and in-page
+    // widgets (search autocomplete especially) navigate to about:blank / blob:
+    // routinely — one per keystroke was a large part of the search freeze.
+    if (/^(about|blob|data|javascript|file):/i.test(url)) return true;
+    // Genuine external schemes (mailto:, tel:) still hand off to the OS.
+    if (!/^https?:/i.test(url)) {
       Linking.openURL(url).catch(() => {});
       return false;
     }
     // Restrict to Board/Community domains so Apple rates the app 4+ (not 17+)
-    if (ALLOWED_WEBVIEW_DOMAINS.some((domain) => url.includes(domain))) return true;
+    if (isAllowedWebViewUrl(url)) return true;
     Linking.openURL(url).catch(() => {});
     return false;
   }
@@ -319,8 +325,35 @@ export default function CommunityTab() {
 
             try {
               // Find the site's pinned top bar by actual computed position, not tag name.
+              // Shared frame scheduler. A burst of DOM mutations (search autocomplete
+              // inserts/removes result nodes on EVERY keystroke) used to run each
+              // observer callback once per mutation; both walk the DOM, so that was
+              // the second half of the Android search freeze. One rAF guard covers
+              // every registered task, so a burst costs at most one pass per frame.
+              var bcTasks = [];
+              var bcRafPending = false;
+              function bcSchedule() {
+                if (bcRafPending) return;
+                bcRafPending = true;
+                var run = function () {
+                  bcRafPending = false;
+                  for (var t = 0; t < bcTasks.length; t++) {
+                    try { bcTasks[t](); } catch (e) {}
+                  }
+                };
+                if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+                else setTimeout(run, 16);
+              }
+
               var bcKnownHeader = null;
+              var bcNoHeaderUntil = 0;
               function findFixedHeader() {
+                // A MISS is cached too, for 2s. Without this, a page with no
+                // qualifying fixed header re-walked every element calling
+                // getComputedStyle on each — forced synchronous layout — on every
+                // single DOM mutation. Detection of a header that appears later is
+                // delayed by at most one interval, which the pollers below cover.
+                if (Date.now() < bcNoHeaderUntil) return null;
                 if (bcKnownHeader && document.body.contains(bcKnownHeader)) {
                   var kcs = window.getComputedStyle(bcKnownHeader);
                   if (kcs.position === 'fixed' || kcs.position === 'sticky') return bcKnownHeader;
@@ -336,6 +369,7 @@ export default function CommunityTab() {
                     return el;
                   }
                 }
+                bcNoHeaderUntil = Date.now() + 2000;
                 return null;
               }
 
@@ -352,9 +386,10 @@ export default function CommunityTab() {
                   bcLastPad = h;
                 }
               }
+              bcTasks.push(padForFixedHeader);
               padForFixedHeader();
-              window.addEventListener('scroll', padForFixedHeader, { passive: true });
-              new MutationObserver(padForFixedHeader).observe(document.body, { childList: true, subtree: true });
+              window.addEventListener('scroll', bcSchedule, { passive: true });
+              new MutationObserver(bcSchedule).observe(document.body, { childList: true, subtree: true });
               var bcPollCount = 0;
               var bcPollTimer = setInterval(function() {
                 padForFixedHeader();
