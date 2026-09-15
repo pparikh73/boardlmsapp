@@ -262,6 +262,70 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
               } catch (e) {}
 
               try {
+                // "Get Started" dropdown on touch. Skilljar reveals .dd-menu on
+                // :hover, which a touch device never produces — the tap instead
+                // follows the trigger's href straight to learning-paths, so the menu
+                // is unreachable on mobile. Mirror the hover state with a class the
+                // handler below toggles.
+                //
+                // !important is added beyond the requested rule: the site's own
+                // hover/visibility declarations may carry it, and a stylesheet rule
+                // without it would lose and leave this inert.
+                var ddStyle = document.createElement('style');
+                ddStyle.textContent =
+                  '.has-dd.touch-open .dd-menu {' +
+                  '  opacity: 1 !important;' +
+                  '  visibility: visible !important;' +
+                  '  transform: translateY(0) !important;' +
+                  '  pointer-events: auto !important;' +
+                  '}';
+                document.head.appendChild(ddStyle);
+
+                // Delegated on document so it survives the site re-rendering its nav,
+                // and in the CAPTURE phase so the href is prevented before Skilljar's
+                // own handler sees the event.
+                var bcDdLastTouch = 0;
+                function bcHandleDd(e, isTouch) {
+                  var t = e.target;
+                  if (!t || typeof t.closest !== 'function') return;
+
+                  var dd = t.closest('.has-dd');
+                  if (!dd) {
+                    // Tap outside any dropdown closes whatever is open.
+                    var open = document.querySelectorAll('.has-dd.touch-open');
+                    for (var i = 0; i < open.length; i++) {
+                      open[i].classList.remove('touch-open');
+                    }
+                    return;
+                  }
+
+                  // A tap INSIDE the revealed menu is a real link click — leave it be,
+                  // otherwise the menu could never be used once opened.
+                  if (t.closest('.dd-menu')) return;
+
+                  // The trigger itself must not navigate: opening the menu is the
+                  // whole point of the tap.
+                  var a = t.closest('a');
+                  if (a && (a.getAttribute('href') || '').indexOf('learning-paths') !== -1) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }
+
+                  // touchend and click both fire for one tap. Toggle on touchend and
+                  // suppress the click that follows, or the menu would open and shut
+                  // in the same gesture.
+                  if (isTouch) {
+                    bcDdLastTouch = Date.now();
+                    dd.classList.toggle('touch-open');
+                  } else if (Date.now() - bcDdLastTouch > 600) {
+                    dd.classList.toggle('touch-open');
+                  }
+                }
+                document.addEventListener('touchend', function (e) { bcHandleDd(e, true); }, true);
+                document.addEventListener('click', function (e) { bcHandleDd(e, false); }, true);
+              } catch (e) {}
+
+              try {
                 // Ensure iframes (Vimeo, Synthesia, etc.) receive the correct Referer header
                 var meta = document.querySelector('meta[name="referrer"]');
                 if (meta) {

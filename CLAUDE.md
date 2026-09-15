@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.39`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.40`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -261,6 +261,17 @@ fallback for when `findFixedHeader()` returns null — it only matches `position
 `sticky`, so if Skilljar's navbar is statically positioned that whole pass never ran, which
 would explain the logo staying small through `.34`, `.36` and `.37`. The fallback looks for
 a `header`, `[role="banner"]` or `nav` near the top that actually contains an image.
+
+Version `2.116621.40` makes Skilljar's "Get Started" dropdown usable on touch. The site
+reveals `.dd-menu` on `:hover`, which a touch device never produces, so a tap followed the
+trigger's `href` straight to learning-paths and the menu was unreachable. Injected into
+`LMSWebView.tsx`: a `.has-dd.touch-open .dd-menu` rule mirroring the hover state, plus a
+delegated `touchend`/`click` handler in the **capture** phase that toggles `touch-open` and
+calls `preventDefault()` on a trigger whose href contains `learning-paths`. Delegated on
+`document` so it survives the nav re-rendering; capture phase so the href is prevented
+before Skilljar's own handler runs. Taps inside an open `.dd-menu` are left alone (they are
+real links), and a tap outside closes any open dropdown. `!important` was added beyond the
+requested rule, since the site's own visibility declarations may carry it. **Untested.**
 
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
