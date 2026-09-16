@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   Linking,
   StatusBar,
@@ -64,11 +63,10 @@ export default function AcademyTab() {
     }, []),
   );
 
-  // TEMPORARY instrumentation (ACADEMY_DIAGNOSTICS). Five builds of dp arithmetic
-  // said this screen fits and the device disagreed every time, so measure instead
-  // of modelling: onLayout gives the real rendered height of each block and
-  // onContentSizeChange vs the ScrollView's own onLayout height answers the only
-  // question that matters — does the content exceed the viewport, and by how much.
+  // TEMPORARY instrumentation (ACADEMY_DIAGNOSTICS). Kept across the .44 rebuild
+  // so the new layout can be confirmed from real device numbers rather than a dp
+  // model. The question it answers in one line: does `cards` y + h stay inside
+  // `container` h? If it does, nothing is off-screen and nothing needs scrolling.
   const logLayout = (name: string) => (e: LayoutChangeEvent) => {
     if (!ACADEMY_DIAGNOSTICS) return;
     const { height, y } = e.nativeEvent.layout;
@@ -101,35 +99,41 @@ export default function AcademyTab() {
     );
   }
 
-  // Not authenticated → show Academy landing with login cards
+  // Not authenticated → show Academy landing with login cards.
+  //
+  // Rebuilt in 2.116621.44. There is deliberately NO ScrollView here: .35–.43
+  // each trimmed dp off a scrolling layout and the cards still ended up needing
+  // a scroll, so the structure is now one flex column that is exactly the height
+  // of the area the tab navigator gives it. Content cannot be "below the fold"
+  // because there is no fold — the only element that absorbs or releases space
+  // is the spacer, and the cards are pinned at flexShrink: 0.
+  //
   // edges omits 'bottom': this screen sits inside the tab navigator, whose
   // tabBarStyle already reserves 56 + insets.bottom with a matching paddingBottom.
   // Leaving edges unset made SafeAreaView apply the bottom inset a second time,
   // costing up to 48dp of content height on gesture-nav Android for nothing.
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        onLayout={logLayout('scrollview-viewport')}
-        onContentSizeChange={(w, h) => {
-          if (!ACADEMY_DIAGNOSTICS) return;
-          console.log(`[BC LAYOUT] content h=${Math.round(h)}`);
-        }}
-      >
-        {/* Header */}
-        <View style={styles.header} onLayout={logLayout('header')}>
+      <View style={styles.container} onLayout={logLayout('container')}>
+        {/* Top section — logo + subtitle. Sized as a fraction of the container,
+            never in dp, and the first content to give up space under pressure. */}
+        <View style={styles.top} onLayout={logLayout('top')}>
           <Image
             source={require('../../assets/Board Academy logo.png')}
-            style={styles.headerLogo}
+            style={styles.logo}
             resizeMode="contain"
             onLayout={logLayout('logo')}
           />
           <Text style={styles.subtitle}>Choose how you'd like to sign in</Text>
         </View>
 
-        {/* Auth cards */}
+        {/* The only element that takes up slack. Grows on a tall screen to push
+            the cards down; collapses to zero on a short one before any real
+            content has to shrink. This replaces justifyContent: 'center', which
+            split overflow across both ends and made the top unreachable. */}
+        <View style={styles.spacer} />
+
+        {/* Auth cards — flexShrink: 0, so these three are always fully on screen. */}
         <View style={styles.cards} onLayout={logLayout('cards')}>
           <TouchableOpacity
             style={[styles.card, {
@@ -184,7 +188,7 @@ export default function AcademyTab() {
         >
           <Text style={styles.footerText}>Need help? {SUPPORT_EMAIL}</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -194,50 +198,66 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: BRAND.white,
   },
-  scroll: {
-    // justifyContent:'center' is deliberately GONE. While the content fits it is
-    // harmless, but the moment it exceeds the scroll view — a large system font
-    // scale is enough — centring splits the overflow across BOTH ends, so the
-    // first card is pushed toward the middle and the top becomes unreachable.
-    // That is the "cards below the fold" report: not the content being too tall
-    // by much, but the overflow being distributed instead of starting at the top.
-    // Top-aligned means every card is reachable at any font scale, and once the
-    // two Android reclaims below apply there is room to spare anyway.
-    flexGrow: 1,
+
+  // Replaces the ScrollView entirely. flex: 1 inside a flex: 1 SafeAreaView means
+  // this box IS the usable screen area — which also makes its height *definite*,
+  // and that is what lets the percentage flexBasis on `top` resolve. (A percentage
+  // height against an auto-height parent resolves to auto in Yoga and would have
+  // silently fallen back to the image's intrinsic size.)
+  container: {
+    flex: 1,
+    flexDirection: 'column',
     paddingHorizontal: 24,
     paddingTop: 16,
     paddingBottom: 24,
   },
-  header: {
+
+  // Top section: takes only what it needs, and needs only a share of the screen.
+  // flexGrow: 0 so it never claims slack (that is the spacer's job), flexShrink: 1
+  // so it is the first thing to give way, flexBasis as a percentage so the same
+  // style works on a 480dp and a 900dp device with no dp constant to re-tune.
+  top: {
+    flexGrow: 0,
+    flexShrink: 1,
+    flexBasis: '22%',
     alignItems: 'center',
-    marginBottom: 12,
   },
-  headerLogo: {
-    // Requested as "replace width:260 / maxHeight:110" — those were the 2.116621.34
-    // values; .35 had already moved to height:72 + aspectRatio. Applied to the
-    // current style with the same intent: a relative width so it scales with the
-    // screen, capped at 260, and a taller ceiling so it does not read small.
-    //
-    // aspectRatio is the asset's own (1162x686). With width 80% of the content box
-    // the derived height still exceeds maxHeight on every phone, so maxHeight binds
-    // and Yoga back-solves the width — the logo renders about 102x60.
-    width: '70%',
+  logo: {
+    // No height, no aspectRatio, no maxHeight — flex: 1 gives it whatever `top`
+    // has left after the subtitle, and resizeMode="contain" letterboxes the asset
+    // (1162x686) inside that box at any size without distortion or overflow.
+    // This is the whole point of the rebuild: the logo can no longer be "too tall"
+    // because its height is a consequence of the layout, not an input to it.
+    flex: 1,
+    width: '100%',
     maxWidth: 240,
-    maxHeight: 60,
-    aspectRatio: 1162 / 686,
     alignSelf: 'center',
     marginBottom: 8,
   },
   subtitle: {
     // Android adds top+bottom font padding to every Text by default, which is
-    // invisible in a dp model but real on device (~63dp across this screen's
-    // 8 Text nodes). No-op on iOS.
+    // invisible in a dp model but real on device. No-op on iOS.
     includeFontPadding: false,
+    flexShrink: 0,
     fontSize: 13,
     color: BRAND.mid2,
     lineHeight: 18,
+    textAlign: 'center',
   },
+
+  // The single slack absorber. flexBasis: 0 so it contributes no intrinsic height;
+  // it exists only to hold the gap between the header and the cards open when
+  // there is room, and to vanish first when there is not.
+  spacer: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+  },
+
+  // flexShrink: 0 is the guarantee in the brief: whatever else gives way, all
+  // three cards keep their full height and stay on screen.
   cards: {
+    flexShrink: 0,
     gap: 14,
   },
   card: {
@@ -252,18 +272,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardTitle: {
-    // Android adds top+bottom font padding to every Text by default, which is
-    // invisible in a dp model but real on device (~63dp across this screen's
-    // 8 Text nodes). No-op on iOS.
     includeFontPadding: false,
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 3,
   },
   cardSub: {
-    // Android adds top+bottom font padding to every Text by default, which is
-    // invisible in a dp model but real on device (~63dp across this screen's
-    // 8 Text nodes). No-op on iOS.
     includeFontPadding: false,
     fontSize: 13,
     color: BRAND.mid2,
@@ -274,13 +288,11 @@ const styles = StyleSheet.create({
     fontWeight: '300',
   },
   footer: {
+    flexShrink: 0,
     marginTop: 24,
     alignItems: 'center',
   },
   footerText: {
-    // Android adds top+bottom font padding to every Text by default, which is
-    // invisible in a dp model but real on device (~63dp across this screen's
-    // 8 Text nodes). No-op on iOS.
     includeFontPadding: false,
     fontSize: 14,
     color: BRAND.mid2,

@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.43`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.44`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -345,6 +345,42 @@ than either. It now goes through its own `requestAnimationFrame` guard. `[BC NAV
 every invocation of the blocking callback with its URL, so the next test says whether that
 path is still hot during a search.
 
+Version `2.116621.44` **rebuilds the landing screen layout from scratch** rather than
+patching it again. `.35`–`.43` each trimmed dp off a `ScrollView`-based layout and the three
+login cards still needed scrolling on Android, so the structure — not the numbers — was the
+problem. The `ScrollView` is **gone**. The screen is now a single flex column:
+
+- `container` — `flex: 1`, `flexDirection: 'column'`. Because it is `flex: 1` inside a
+  `flex: 1` `SafeAreaView`, its height is **definite**, which is what lets the percentage
+  `flexBasis` below resolve. (A percentage height against an auto-height parent resolves to
+  auto in Yoga; the image would have silently fallen back to its intrinsic 1162x686.)
+- `top` — `flexGrow: 0`, `flexShrink: 1`, `flexBasis: '22%'`. Claims no slack, gives way
+  first, and is expressed as a share of the screen so the same style holds on a 480dp and a
+  900dp device with no dp constant to re-tune.
+- `logo` — `flex: 1`, `width: '100%'`, `maxWidth: 240`, `resizeMode="contain"`. **No height,
+  no `aspectRatio`, no `maxHeight`.** Its height is now a *consequence* of the layout rather
+  than an input to it, so "the logo is too tall" is no longer a reachable state.
+- `spacer` — `flexGrow: 1`, `flexShrink: 1`, `flexBasis: 0`. The only slack absorber,
+  replacing `justifyContent: 'center'`. It holds the gap open when there is room and
+  collapses to zero before any real content shrinks.
+- `cards` and `footer` — `flexShrink: 0`. This is the guarantee: whatever else gives way,
+  all three login options keep their full height and stay on screen.
+
+Collapse order under pressure is therefore spacer → `top`/logo → nothing else. The
+non-shrinkable content (three cards ≈259dp + footer ≈41dp + 40dp container padding ≈340dp)
+fits the ≈556dp usable height of a 640dp device with room to spare, and still fits at
+fontScale 2.0 (≈440dp).
+
+**The trade-off to know about**: with no `ScrollView` there is no fallback. If content ever
+did exceed the container it would clip rather than scroll. `flexShrink: 0` on the cards
+means that can never happen *to the cards* — the logo absorbs it — but on a very short
+screen (≈480dp tall) at a very large font scale the footer could be squeezed. If that is
+ever reported, shrink `top`'s `flexBasis` rather than reintroducing a scroll view.
+
+Instrumentation from `.43` is **kept** (`ACADEMY_DIAGNOSTICS` still `true`, so this build is
+also not for public release). The one number that settles the rebuild: `[BC LAYOUT] cards`
+`y + h` must stay inside `[BC LAYOUT] container h`.
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -459,7 +495,18 @@ been started yet.
 - **`justifyContent: 'center'` on a ScrollView `contentContainerStyle` is a trap.** It is
   fine while the content fits, but when it overflows the excess is split across both ends,
   so the top becomes unreachable rather than the bottom simply scrolling. Prefer top
-  alignment on any screen whose height depends on the system font scale.
+  alignment on any screen whose height depends on the system font scale — or, as the
+  landing screen now does, a `flexGrow` spacer, which puts the slack in exactly one place.
+- **Percentage heights need a parent with a DEFINITE height.** Yoga resolves a percentage
+  against the parent's resolved height, and an auto-height parent resolves it to auto — so
+  `flexBasis: '22%'` or `maxHeight: '20%'` silently becomes "whatever the content wants"
+  unless every ancestor up to the screen is `flex: 1` or explicitly sized. On the landing
+  screen this is why `container` must stay `flex: 1` inside a `flex: 1` `SafeAreaView`.
+- **A fixed-size logo is a recurring self-inflicted bug on this app.** `.33`–`.43` set
+  `height`, then `aspectRatio` + `maxHeight`, then smaller `maxHeight`, and the screen
+  overflowed every time because the logo's size was an *input* to the layout. Give the image
+  `flex: 1` + a relative `width` + `resizeMode="contain"` and let its height fall out of the
+  space that is actually left. Applies to any full-bleed art in a height-constrained screen.
 - **`:hover` sticks on Android until you tap elsewhere.** Any hover-revealed UI needs its
   hover rule neutralised under `@media (hover: none), (pointer: coarse)` before a
   touch-driven class can control it — otherwise removing the class looks like it does
