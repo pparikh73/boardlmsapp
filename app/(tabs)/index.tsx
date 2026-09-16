@@ -8,12 +8,13 @@ import {
   Linking,
   StatusBar,
   Image,
+  type LayoutChangeEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, router, useNavigation } from 'expo-router';
 import LMSWebView, { LMSWebViewHandle } from '../../components/LMSWebView';
 import { getSession, getCachedSession, logout, type Session } from '../../services/auth';
-import { BRAND, AUTH_URLS, TAB_URLS, SUPPORT_EMAIL } from '../../constants/skilljar';
+import { BRAND, AUTH_URLS, TAB_URLS, SUPPORT_EMAIL, ACADEMY_DIAGNOSTICS } from '../../constants/skilljar';
 
 // Colors for the auth cards — derived from Board brand assets
 const CARD_COLORS = {
@@ -63,6 +64,17 @@ export default function AcademyTab() {
     }, []),
   );
 
+  // TEMPORARY instrumentation (ACADEMY_DIAGNOSTICS). Five builds of dp arithmetic
+  // said this screen fits and the device disagreed every time, so measure instead
+  // of modelling: onLayout gives the real rendered height of each block and
+  // onContentSizeChange vs the ScrollView's own onLayout height answers the only
+  // question that matters — does the content exceed the viewport, and by how much.
+  const logLayout = (name: string) => (e: LayoutChangeEvent) => {
+    if (!ACADEMY_DIAGNOSTICS) return;
+    const { height, y } = e.nativeEvent.layout;
+    console.log(`[BC LAYOUT] ${name} h=${Math.round(height)} y=${Math.round(y)}`);
+  };
+
   // Tapping the Academy tab while already on it returns to the home page
   useEffect(() => {
     const unsubscribe = navigation.addListener('tabPress' as any, () => {
@@ -100,19 +112,25 @@ export default function AcademyTab() {
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        onLayout={logLayout('scrollview-viewport')}
+        onContentSizeChange={(w, h) => {
+          if (!ACADEMY_DIAGNOSTICS) return;
+          console.log(`[BC LAYOUT] content h=${Math.round(h)}`);
+        }}
       >
         {/* Header */}
-        <View style={styles.header}>
+        <View style={styles.header} onLayout={logLayout('header')}>
           <Image
             source={require('../../assets/Board Academy logo.png')}
             style={styles.headerLogo}
             resizeMode="contain"
+            onLayout={logLayout('logo')}
           />
           <Text style={styles.subtitle}>Choose how you'd like to sign in</Text>
         </View>
 
         {/* Auth cards */}
-        <View style={styles.cards}>
+        <View style={styles.cards} onLayout={logLayout('cards')}>
           <TouchableOpacity
             style={[styles.card, {
               backgroundColor: CARD_COLORS.customerBg,
@@ -161,6 +179,7 @@ export default function AcademyTab() {
 
         <TouchableOpacity
           style={styles.footer}
+          onLayout={logLayout('footer')}
           onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
         >
           <Text style={styles.footerText}>Need help? {SUPPORT_EMAIL}</Text>

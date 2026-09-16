@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.42`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.43`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -310,6 +310,41 @@ Note `app/(tabs)/index.tsx`'s **authenticated** branch still uses a `SafeAreaVie
 `edges` prop around the WebView, so it double-counts the bottom inset in the same way —
 left alone deliberately to keep this change to the reported screen.
 
+Version `2.116621.43` is an **instrumented** build — `ACADEMY_DIAGNOSTICS = true` in
+`constants/skilljar.ts`. **Do not ship it publicly**; set the flag false to compile the
+logging out. It covers three reports.
+
+**Landing screen.** All of `.42` verified present in the file: `edges={['top','left','right']}`,
+`justifyContent` gone, `includeFontPadding: false` on all four text styles. So five builds
+of dp arithmetic have now said this fits while the device disagreed — stop modelling and
+measure. `onLayout` on the logo, header, cards and footer plus `onContentSizeChange` and the
+ScrollView's own `onLayout` now log real heights as `[BC LAYOUT]`. Content height vs viewport
+height is the only number that settles it. **No layout values were changed this build** —
+changing them again before reading the measurements is what the last five builds did.
+
+**Get Started dropdown.** Root cause is very likely **sticky `:hover`**: on Android the
+`:hover` state remains on the last-tapped element until you touch elsewhere, so tap 1 opened
+the menu via both `touch-open` *and* the site's own `.has-dd:hover` rule, and tap 2 removed
+our class while `:hover` kept the menu visible. That is exactly why "tap outside closes"
+worked and "tap again" did not — tapping outside moves the sticky hover away. The injected
+CSS now neutralises `.has-dd:hover .dd-menu` inside `@media (hover: none), (pointer: coarse)`
+*before* re-asserting `.has-dd.touch-open .dd-menu`; both are `(0,3,0)` so source order
+decides. `[BC DD]` logs the touch target, whether `.has-dd`/`.dd-menu` matched, whether the
+class was added or removed, and the menu's **computed** visibility afterwards — if the class
+is removed but it still computes visible, the cause is CSS and not the handler.
+
+**Search freeze.** Fix 2 is confirmed correctly applied (`components/LMSWebView.tsx:107`
+returns `true` for Android before any domain work; enforcement is at line 59 in
+`handleNavigationChange`). A **third** cause was found instead: `plObserver` called
+`fixVideosEverywhere` **directly on every mutation**, uncoalesced. It observes `document.body`
+with `childList`, `subtree` **and `attributes`**, and the callback does a full-document
+`querySelectorAll('iframe')` plus a cross-origin `contentDocument` probe per iframe — each
+throwing and being caught. The `.38` work coalesced `padForFixedHeader` and
+`fixHeaderOverlap` but missed this one, and the attribute filter makes it fire more often
+than either. It now goes through its own `requestAnimationFrame` guard. `[BC NAV]` also logs
+every invocation of the blocking callback with its URL, so the next test says whether that
+path is still hot during a search.
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -425,6 +460,14 @@ been started yet.
   fine while the content fits, but when it overflows the excess is split across both ends,
   so the top becomes unreachable rather than the bottom simply scrolling. Prefer top
   alignment on any screen whose height depends on the system font scale.
+- **`:hover` sticks on Android until you tap elsewhere.** Any hover-revealed UI needs its
+  hover rule neutralised under `@media (hover: none), (pointer: coarse)` before a
+  touch-driven class can control it — otherwise removing the class looks like it does
+  nothing, while tapping elsewhere appears to work.
+- **Every `MutationObserver` callback must be behind a frame guard — check them ALL.**
+  `.38` coalesced two and missed `plObserver`, which was the more expensive one and fired
+  on attribute changes too. When adding a guard, grep for every `new MutationObserver(` in
+  the file rather than fixing the ones a bug report happens to point at.
 - **Every injected-JS fix should be wrapped in its own `try/catch`.** Sites change their
   DOM shape without notice; one throwing selector shouldn't silently abort every other
   fix in the same injection block.

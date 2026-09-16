@@ -15,6 +15,14 @@ export const COMMUNITY_BACKGROUND = '#1a2444';
 // public App Store release — testers would otherwise see a debug overlay.
 // Delete this flag and constants/communityDiagnostic.ts once the bug is found.
 export const COMMUNITY_DIAGNOSTICS = false;
+
+// TEMPORARY, same contract as COMMUNITY_DIAGNOSTICS. Turns on:
+//   - [BC LAYOUT] logs of the real rendered heights on the Academy landing screen
+//   - [BC DD] logs from the Get Started dropdown touch handler
+//   - [BC NAV] a log every time the blocking onShouldStartLoadWithRequest fires
+// MUST be false for any public release. Set false and the console.logs, the
+// onMessage handler body and the injected bcLog calls all compile out.
+export const ACADEMY_DIAGNOSTICS = true;
 // Community uses Azure AD B2C — separate from Academy's Skilljar SSO
 export const COMMUNITY_AUTH_URL = 'https://community.board.com/entry/signin?target=https%3A%2F%2Fcommunity.board.com%2F';
 // Community employee login uses Azure AD SAML (Boardway/corporate SSO)

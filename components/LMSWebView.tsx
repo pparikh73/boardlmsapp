@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 're
 import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform } from 'react-native';
 import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
-import { BRAND, WEBVIEW_USER_AGENT, isAllowedWebViewUrl } from '../constants/skilljar';
+import { BRAND, WEBVIEW_USER_AGENT, isAllowedWebViewUrl, ACADEMY_DIAGNOSTICS } from '../constants/skilljar';
 
 interface LMSWebViewProps {
   url: string;
@@ -77,6 +77,13 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
 
     function handleShouldStartLoadWithRequest(request: WebViewRequest): boolean {
       const { url } = request;
+      // TEMPORARY (ACADEMY_DIAGNOSTICS). On Android this callback BLOCKS the WebView
+      // thread for up to 250ms per invocation, so the count during one search
+      // interaction is the number that matters — it tells us whether the freeze is
+      // still this path at all, or somewhere else entirely.
+      if (ACADEMY_DIAGNOSTICS) {
+        console.log(`[BC NAV] shouldStartLoad ${Platform.OS} ${url.slice(0, 120)}`);
+      }
       // Only restrict top-level (user-initiated) navigation. This callback also fires for
       // iframe sub-resource loads (e.g. Synthesia's video player embed) — blocking those
       // sent them out to the system browser instead of playing inline, since the video
@@ -137,6 +144,16 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
             setRefreshing(false);
           }}
           onNavigationStateChange={handleNavigationChange}
+          // Bridge for the injected diagnostics below. Without an onMessage prop
+          // the injected bcLog() calls have nowhere to go — this component had no
+          // bridge at all before 2.116621.43.
+          onMessage={(event) => {
+            if (!ACADEMY_DIAGNOSTICS) return;
+            try {
+              const data = JSON.parse(event.nativeEvent.data);
+              if (data && data.bc) console.log(`[BC ${data.tag}] ${data.bc}`);
+            } catch {}
+          }}
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
@@ -271,8 +288,26 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 // !important is added beyond the requested rule: the site's own
                 // hover/visibility declarations may carry it, and a stylesheet rule
                 // without it would lose and leave this inert.
+                // 2.116621.43 — the likely reason the second tap appeared to do nothing.
+                // On Android the :hover state STICKS to the last-tapped element until
+                // you touch somewhere else. So tap 1 opened the menu via BOTH our class
+                // and the site's own .has-dd:hover rule; tap 2 removed our class, but
+                // :hover was still applied to that same element, so the site's rule kept
+                // .dd-menu visible. Tapping outside moved the sticky hover away, which is
+                // exactly why "tap outside closes" worked while "tap again" did not.
+                //
+                // Neutralise the hover rule on touch pointers FIRST, then re-assert
+                // touch-open AFTER. Both are (0,3,0) specificity, so source order decides
+                // and the later rule wins whenever touch-open is present.
                 var ddStyle = document.createElement('style');
                 ddStyle.textContent =
+                  '@media (hover: none), (pointer: coarse) {' +
+                  '  .has-dd:hover .dd-menu, .has-dd:focus-within .dd-menu {' +
+                  '    opacity: 0 !important;' +
+                  '    visibility: hidden !important;' +
+                  '    pointer-events: none !important;' +
+                  '  }' +
+                  '}' +
                   '.has-dd.touch-open .dd-menu {' +
                   '  opacity: 1 !important;' +
                   '  visibility: visible !important;' +
@@ -280,6 +315,21 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   '  pointer-events: auto !important;' +
                   '}';
                 document.head.appendChild(ddStyle);
+
+                // TEMPORARY diagnostics, gated on the RN side by ACADEMY_DIAGNOSTICS —
+                // with the flag off, onMessage early-returns and these are inert noise.
+                function bcLog(tag, msg) {
+                  try {
+                    if (window.ReactNativeWebView) {
+                      window.ReactNativeWebView.postMessage(JSON.stringify({ tag: tag, bc: msg }));
+                    }
+                  } catch (e) {}
+                }
+                function bcDesc(el) {
+                  if (!el) return 'null';
+                  var c = typeof el.className === 'string' ? el.className : '';
+                  return el.tagName + (c ? '.' + c.trim().split(/\s+/).slice(0, 3).join('.') : '');
+                }
 
                 // Delegated on document so it survives the site re-rendering its nav,
                 // and in the CAPTURE phase so the href is prevented before Skilljar's
@@ -304,6 +354,10 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   if (!t || typeof t.closest !== 'function') return;
 
                   var dd = t.closest('.has-dd');
+                  bcLog('DD', 'touchend target=' + bcDesc(t) +
+                        ' has-dd=' + (dd ? bcDesc(dd) : 'NO MATCH') +
+                        ' dd-menu=' + (t.closest('.dd-menu') ? 'INSIDE (early return)' : 'no') +
+                        ' wasOpen=' + (dd ? dd.classList.contains('touch-open') : 'n/a'));
                   if (!dd) {
                     // Tap outside any dropdown closes whatever is open.
                     bcDdCloseAll(null);
@@ -328,10 +382,22 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   // between — a stray toggle can otherwise leave open and shut inverted.
                   if (dd.classList.contains('touch-open')) {
                     dd.classList.remove('touch-open');
+                    bcLog('DD', 'REMOVED touch-open');
                   } else {
                     bcDdCloseAll(dd);
                     dd.classList.add('touch-open');
+                    bcLog('DD', 'ADDED touch-open');
                   }
+                  // Report what the menu ACTUALLY computes to afterwards. If the class
+                  // was removed but this still reads visible, the cause is CSS (sticky
+                  // :hover) rather than the handler — which is the whole question.
+                  try {
+                    var m = dd.querySelector('.dd-menu');
+                    if (m) {
+                      var ms = window.getComputedStyle(m);
+                      bcLog('DD', 'after: visibility=' + ms.visibility + ' opacity=' + ms.opacity);
+                    }
+                  } catch (e) {}
                 }
 
                 // Click NEVER toggles. It exists only to suppress the trigger's
@@ -460,7 +526,31 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   });
                 }
                 fixVideosEverywhere();
-                var plObserver = new MutationObserver(fixVideosEverywhere);
+                // COALESCED in 2.116621.43. This observer watches document.body with
+                // childList, subtree AND attributes, and fixVideosEverywhere does a
+                // full-document querySelectorAll('iframe') plus a cross-origin
+                // contentDocument probe per iframe — each of which throws and is
+                // caught, which is expensive in a hot loop. It ran ONCE PER MUTATION,
+                // uncoalesced: the .38 work routed padForFixedHeader and
+                // fixHeaderOverlap through bcSchedule but missed this one, and the
+                // attributes filter makes it fire more often than either of those.
+                // Search autocomplete mutates attributes on every keystroke, so this
+                // is a third contributor to the Android freeze independent of the
+                // blocking navigation callback.
+                var bcVidRafPending = false;
+                function bcScheduleVideoFix() {
+                  if (bcVidRafPending) return;
+                  bcVidRafPending = true;
+                  var run = function () {
+                    bcVidRafPending = false;
+                    try { fixVideosEverywhere(); } catch (e) {}
+                  };
+                  // Its own guard rather than bcSchedule: that one lives in a later
+                  // try block, so its state vars are still undefined at this point.
+                  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+                  else setTimeout(run, 16);
+                }
+                var plObserver = new MutationObserver(bcScheduleVideoFix);
                 plObserver.observe(document.body, {
                   childList: true,
                   subtree: true,
