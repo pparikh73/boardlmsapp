@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.40`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.41`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -272,6 +272,17 @@ calls `preventDefault()` on a trigger whose href contains `learning-paths`. Dele
 before Skilljar's own handler runs. Taps inside an open `.dd-menu` are left alone (they are
 real links), and a tap outside closes any open dropdown. `!important` was added beyond the
 requested rule, since the site's own visibility declarations may carry it. **Untested.**
+
+Version `2.116621.41` fixes the dropdown not collapsing on a second tap on Android. `.40`
+toggled on **both** `touchend` and `click`, with a 600ms guard meant to swallow the click
+that follows a tap; that guard did not hold on Android WebView, so the second tap removed
+`touch-open` on `touchend` and the click put it straight back. `touchend` is now the only
+event that toggles, so there is no timing window left to get wrong. `click` is still bound
+but only suppresses the trigger's navigation, never the class. The toggle is also explicit
+(`contains` → `add`/`remove`) rather than `classList.toggle`, so state after a tap does not
+depend on what the site may have done to the class in between, and opening one dropdown
+closes any other. Taps inside `.dd-menu` return before both the `preventDefault` and the
+toggle, so menu links stay clickable.
 
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track

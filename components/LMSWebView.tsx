@@ -284,23 +284,35 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 // Delegated on document so it survives the site re-rendering its nav,
                 // and in the CAPTURE phase so the href is prevented before Skilljar's
                 // own handler sees the event.
-                var bcDdLastTouch = 0;
-                function bcHandleDd(e, isTouch) {
+                //
+                // 2.116621.41: touchend is now the ONLY thing that toggles. .40 toggled
+                // on touchend AND on click, with a 600ms guard meant to swallow the
+                // click that follows a tap; on Android that guard did not hold, so a
+                // second tap removed touch-open on touchend and the click put it
+                // straight back — the menu looked like it would not close. touchend is
+                // sufficient on mobile, so click no longer participates in the toggle
+                // at all and there is no timing window left to get wrong.
+                function bcDdCloseAll(except) {
+                  var open = document.querySelectorAll('.has-dd.touch-open');
+                  for (var i = 0; i < open.length; i++) {
+                    if (open[i] !== except) open[i].classList.remove('touch-open');
+                  }
+                }
+
+                function bcHandleDdTouch(e) {
                   var t = e.target;
                   if (!t || typeof t.closest !== 'function') return;
 
                   var dd = t.closest('.has-dd');
                   if (!dd) {
                     // Tap outside any dropdown closes whatever is open.
-                    var open = document.querySelectorAll('.has-dd.touch-open');
-                    for (var i = 0; i < open.length; i++) {
-                      open[i].classList.remove('touch-open');
-                    }
+                    bcDdCloseAll(null);
                     return;
                   }
 
-                  // A tap INSIDE the revealed menu is a real link click — leave it be,
-                  // otherwise the menu could never be used once opened.
+                  // A tap INSIDE the revealed menu is a real link. Return before both
+                  // the preventDefault and the toggle, so menu links stay clickable and
+                  // the menu does not close under the finger mid-tap.
                   if (t.closest('.dd-menu')) return;
 
                   // The trigger itself must not navigate: opening the menu is the
@@ -311,18 +323,36 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                     e.stopPropagation();
                   }
 
-                  // touchend and click both fire for one tap. Toggle on touchend and
-                  // suppress the click that follows, or the menu would open and shut
-                  // in the same gesture.
-                  if (isTouch) {
-                    bcDdLastTouch = Date.now();
-                    dd.classList.toggle('touch-open');
-                  } else if (Date.now() - bcDdLastTouch > 600) {
-                    dd.classList.toggle('touch-open');
+                  // Explicit open/close rather than classList.toggle, so the state after
+                  // a tap never depends on what the site may have done to the class in
+                  // between — a stray toggle can otherwise leave open and shut inverted.
+                  if (dd.classList.contains('touch-open')) {
+                    dd.classList.remove('touch-open');
+                  } else {
+                    bcDdCloseAll(dd);
+                    dd.classList.add('touch-open');
                   }
                 }
-                document.addEventListener('touchend', function (e) { bcHandleDd(e, true); }, true);
-                document.addEventListener('click', function (e) { bcHandleDd(e, false); }, true);
+
+                // Click NEVER toggles. It exists only to suppress the trigger's
+                // navigation in case the browser still dispatches a click after the
+                // touchend above (preventDefault there normally cancels it, but not
+                // dependably across Android WebView versions).
+                function bcHandleDdClick(e) {
+                  var t = e.target;
+                  if (!t || typeof t.closest !== 'function') return;
+                  // Menu links must stay clickable — check this before anything else.
+                  if (t.closest('.dd-menu')) return;
+                  if (!t.closest('.has-dd')) return;
+                  var a = t.closest('a');
+                  if (a && (a.getAttribute('href') || '').indexOf('learning-paths') !== -1) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }
+                }
+
+                document.addEventListener('touchend', bcHandleDdTouch, true);
+                document.addEventListener('click', bcHandleDdClick, true);
               } catch (e) {}
 
               try {
