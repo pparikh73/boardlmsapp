@@ -90,8 +90,12 @@ export default function AcademyTab() {
   }
 
   // Not authenticated → show Academy landing with login cards
+  // edges omits 'bottom': this screen sits inside the tab navigator, whose
+  // tabBarStyle already reserves 56 + insets.bottom with a matching paddingBottom.
+  // Leaving edges unset made SafeAreaView apply the bottom inset a second time,
+  // costing up to 48dp of content height on gesture-nav Android for nothing.
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -172,16 +176,18 @@ const styles = StyleSheet.create({
     backgroundColor: BRAND.white,
   },
   scroll: {
-    // flexGrow alone gives justifyContent:'center' a full-height box to centre
-    // within when the content fits. minHeight:'100%' was added in 2.116621.33
-    // for an overlap it did not fix and is redundant with flexGrow here, so it
-    // is removed rather than left as a second, differently-resolved height
-    // constraint on the same box.
+    // justifyContent:'center' is deliberately GONE. While the content fits it is
+    // harmless, but the moment it exceeds the scroll view — a large system font
+    // scale is enough — centring splits the overflow across BOTH ends, so the
+    // first card is pushed toward the middle and the top becomes unreachable.
+    // That is the "cards below the fold" report: not the content being too tall
+    // by much, but the overflow being distributed instead of starting at the top.
+    // Top-aligned means every card is reachable at any font scale, and once the
+    // two Android reclaims below apply there is room to spare anyway.
     flexGrow: 1,
     paddingHorizontal: 24,
-    paddingTop: 10,
+    paddingTop: 16,
     paddingBottom: 24,
-    justifyContent: 'center',
   },
   header: {
     alignItems: 'center',
@@ -204,6 +210,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   subtitle: {
+    // Android adds top+bottom font padding to every Text by default, which is
+    // invisible in a dp model but real on device (~63dp across this screen's
+    // 8 Text nodes). No-op on iOS.
+    includeFontPadding: false,
     fontSize: 13,
     color: BRAND.mid2,
     lineHeight: 18,
@@ -223,11 +233,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardTitle: {
+    // Android adds top+bottom font padding to every Text by default, which is
+    // invisible in a dp model but real on device (~63dp across this screen's
+    // 8 Text nodes). No-op on iOS.
+    includeFontPadding: false,
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 3,
   },
   cardSub: {
+    // Android adds top+bottom font padding to every Text by default, which is
+    // invisible in a dp model but real on device (~63dp across this screen's
+    // 8 Text nodes). No-op on iOS.
+    includeFontPadding: false,
     fontSize: 13,
     color: BRAND.mid2,
   },
@@ -241,6 +259,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
+    // Android adds top+bottom font padding to every Text by default, which is
+    // invisible in a dp model but real on device (~63dp across this screen's
+    // 8 Text nodes). No-op on iOS.
+    includeFontPadding: false,
     fontSize: 14,
     color: BRAND.mid2,
   },

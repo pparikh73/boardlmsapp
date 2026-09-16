@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.41`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.42`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -284,6 +284,32 @@ depend on what the site may have done to the class in between, and opening one d
 closes any other. Taps inside `.dd-menu` return before both the `preventDefault` and the
 toggle, so menu links stay clickable.
 
+Version `2.116621.42` fixes the landing screen properly. `.35`–`.39` kept trimming dp and
+the cards still needed scrolling, because the dp model was wrong in two Android-specific
+ways that trimming could not reach:
+
+1. **The bottom inset was counted twice.** `app/(tabs)/_layout.tsx` already reserves
+   `56 + insets.bottom` for the tab bar, and the landing `SafeAreaView` had no `edges`
+   prop, so it applied the bottom inset *again* for content that already sits above the
+   tab bar — up to 48dp on gesture-nav Android. Fixed with
+   `edges={['top', 'left', 'right']}`.
+2. **`includeFontPadding` defaults to true on Android**, adding top and bottom padding to
+   every `Text`. Roughly 63dp across this screen's 8 Text nodes, invisible in a dp model
+   built from nominal line metrics — which is exactly why iOS matched the numbers and
+   Android did not. Set to `false` on `subtitle`, `cardTitle`, `cardSub` and `footerText`.
+
+`justifyContent: 'center'` is also **removed**. While content fits it is harmless, but once
+it exceeds the scroll view, centring splits the overflow across both ends, pushing the
+first card toward the middle and making the top unreachable — that is the "below the fold"
+report, the overflow being *distributed* rather than the content being much too tall. Top
+aligned means every card is reachable at any font scale. `paddingTop` 10→16 so the logo
+does not sit against the status bar. Content now fits to fontScale 1.5 even with a 48dp
+bottom inset, and beyond that it scrolls from the top with nothing cut off.
+
+Note `app/(tabs)/index.tsx`'s **authenticated** branch still uses a `SafeAreaView` with no
+`edges` prop around the WebView, so it double-counts the bottom inset in the same way —
+left alone deliberately to keep this change to the reported screen.
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -389,6 +415,16 @@ been started yet.
   the hit is what made `findFixedHeader()` re-walk the whole document per mutation — and
   route observer, scroll and resize callbacks through a single `requestAnimationFrame`
   guard (`bcSchedule`) rather than calling the work directly.
+- **Two Android-only costs are invisible in a dp model.** A `SafeAreaView` inside the tab
+  navigator must pass `edges={['top','left','right']}` — `tabBarStyle` already reserves
+  `56 + insets.bottom`, so leaving `edges` unset spends that inset twice. And Android's
+  `includeFontPadding` defaults to true, adding padding around every `Text`. Together they
+  cost ~60-110dp on this app's screens, which is why `.35`-`.39` kept trimming dp against
+  numbers that looked fine and a device that disagreed.
+- **`justifyContent: 'center'` on a ScrollView `contentContainerStyle` is a trap.** It is
+  fine while the content fits, but when it overflows the excess is split across both ends,
+  so the top becomes unreachable rather than the bottom simply scrolling. Prefer top
+  alignment on any screen whose height depends on the system font scale.
 - **Every injected-JS fix should be wrapped in its own `try/catch`.** Sites change their
   DOM shape without notice; one throwing selector shouldn't silently abort every other
   fix in the same injection block.
