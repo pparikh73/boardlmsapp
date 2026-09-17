@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 're
 import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform } from 'react-native';
 import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
-import { BRAND, WEBVIEW_USER_AGENT, isAllowedWebViewUrl, ACADEMY_DIAGNOSTICS } from '../constants/skilljar';
+import { BRAND, WEBVIEW_USER_AGENT, isAllowedWebViewUrl } from '../constants/skilljar';
 
 interface LMSWebViewProps {
   url: string;
@@ -45,6 +45,16 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
         onLogout?.();
       }
 
+      // Belt-and-braces for the dropdown-across-navigation fix. The injected
+      // history.pushState/replaceState hooks are the primary mechanism; this covers
+      // any navigation that reaches the native side without going through them.
+      // Deliberately ABOVE the Android-only block below — the dropdown is a touch
+      // affordance on both platforms, so this must not be inside that early return.
+      webViewRef.current?.injectJavaScript(
+        `(function(){try{var o=document.querySelectorAll('.has-dd.touch-open');` +
+        `for(var i=0;i<o.length;i++){o[i].classList.remove('touch-open');}}catch(e){}})();true;`
+      );
+
       // ANDROID allowlist enforcement lives here, not in onShouldStartLoadWithRequest.
       // That callback BLOCKS the Android WebView thread for up to 250ms per navigation
       // (RNCWebViewClient.shouldOverrideUrlLoading waits on a lock) and carries no
@@ -77,13 +87,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
 
     function handleShouldStartLoadWithRequest(request: WebViewRequest): boolean {
       const { url } = request;
-      // TEMPORARY (ACADEMY_DIAGNOSTICS). On Android this callback BLOCKS the WebView
-      // thread for up to 250ms per invocation, so the count during one search
-      // interaction is the number that matters — it tells us whether the freeze is
-      // still this path at all, or somewhere else entirely.
-      if (ACADEMY_DIAGNOSTICS) {
-        console.log(`[BC NAV] shouldStartLoad ${Platform.OS} ${url.slice(0, 120)}`);
-      }
       // Only restrict top-level (user-initiated) navigation. This callback also fires for
       // iframe sub-resource loads (e.g. Synthesia's video player embed) — blocking those
       // sent them out to the system browser instead of playing inline, since the video
@@ -144,16 +147,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
             setRefreshing(false);
           }}
           onNavigationStateChange={handleNavigationChange}
-          // Bridge for the injected diagnostics below. Without an onMessage prop
-          // the injected bcLog() calls have nowhere to go — this component had no
-          // bridge at all before 2.116621.43.
-          onMessage={(event) => {
-            if (!ACADEMY_DIAGNOSTICS) return;
-            try {
-              const data = JSON.parse(event.nativeEvent.data);
-              if (data && data.bc) console.log(`[BC ${data.tag}] ${data.bc}`);
-            } catch {}
-          }}
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
@@ -293,31 +286,33 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 // "Get Started" dropdown on touch. Skilljar reveals .dd-menu on
                 // :hover, which a touch device never produces — the tap instead
                 // follows the trigger's href straight to learning-paths, so the menu
-                // is unreachable on mobile. Mirror the hover state with a class the
-                // handler below toggles.
+                // is unreachable on mobile. A class the handler below toggles drives
+                // it instead.
                 //
-                // !important is added beyond the requested rule: the site's own
-                // hover/visibility declarations may carry it, and a stylesheet rule
-                // without it would lose and leave this inert.
-                // 2.116621.43 — the likely reason the second tap appeared to do nothing.
-                // On Android the :hover state STICKS to the last-tapped element until
-                // you touch somewhere else. So tap 1 opened the menu via BOTH our class
-                // and the site's own .has-dd:hover rule; tap 2 removed our class, but
-                // :hover was still applied to that same element, so the site's rule kept
-                // .dd-menu visible. Tapping outside moved the sticky hover away, which is
-                // exactly why "tap outside closes" worked while "tap again" did not.
+                // 2.116621.46 — the menu's visibility now depends on the class ALONE.
                 //
-                // Neutralise the hover rule on touch pointers FIRST, then re-assert
-                // touch-open AFTER. Both are (0,3,0) specificity, so source order decides
-                // and the later rule wins whenever touch-open is present.
+                // .40 through .45 all tried to WIN a fight against the site's own
+                // hover rule: first by mirroring it, then (.43/.45) by neutralising
+                // .has-dd:hover inside @media (hover: none), (pointer: coarse). That
+                // media query is the weak link — if the WebView reports hover: hover
+                // (a stylus, a connected mouse, or simply a WebView that misreports),
+                // the neutraliser never matches and the sticky :hover keeps the menu
+                // open, which is exactly the "does not close on second tap" report.
+                //
+                // Not competing any more. The closed state is display: none, which no
+                // opacity/visibility/transform declaration in the site's hover rule can
+                // override at any specificity, and it applies unconditionally — no
+                // media query to misreport. The menu is visible if and only if
+                // .touch-open is present, so removing the class always closes it.
+                //
+                // display is deliberately NOT set in the open rule: with
+                // :not(.touch-open) no longer matching, the site's own display value
+                // applies, so a .dd-menu that is a flex or grid container keeps its
+                // internal layout intact.
                 var ddStyle = document.createElement('style');
                 ddStyle.textContent =
-                  '@media (hover: none), (pointer: coarse) {' +
-                  '  .has-dd:hover .dd-menu, .has-dd:focus-within .dd-menu {' +
-                  '    opacity: 0 !important;' +
-                  '    visibility: hidden !important;' +
-                  '    pointer-events: none !important;' +
-                  '  }' +
+                  '.has-dd:not(.touch-open) .dd-menu {' +
+                  '  display: none !important;' +
                   '}' +
                   '.has-dd.touch-open .dd-menu {' +
                   '  opacity: 1 !important;' +
@@ -326,21 +321,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   '  pointer-events: auto !important;' +
                   '}';
                 document.head.appendChild(ddStyle);
-
-                // TEMPORARY diagnostics, gated on the RN side by ACADEMY_DIAGNOSTICS —
-                // with the flag off, onMessage early-returns and these are inert noise.
-                function bcLog(tag, msg) {
-                  try {
-                    if (window.ReactNativeWebView) {
-                      window.ReactNativeWebView.postMessage(JSON.stringify({ tag: tag, bc: msg }));
-                    }
-                  } catch (e) {}
-                }
-                function bcDesc(el) {
-                  if (!el) return 'null';
-                  var c = typeof el.className === 'string' ? el.className : '';
-                  return el.tagName + (c ? '.' + c.trim().split(/\s+/).slice(0, 3).join('.') : '');
-                }
 
                 // Delegated on document so it survives the site re-rendering its nav,
                 // and in the CAPTURE phase so the href is prevented before Skilljar's
@@ -365,10 +345,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   if (!t || typeof t.closest !== 'function') return;
 
                   var dd = t.closest('.has-dd');
-                  bcLog('DD', 'touchend target=' + bcDesc(t) +
-                        ' has-dd=' + (dd ? bcDesc(dd) : 'NO MATCH') +
-                        ' dd-menu=' + (t.closest('.dd-menu') ? 'INSIDE (early return)' : 'no') +
-                        ' wasOpen=' + (dd ? dd.classList.contains('touch-open') : 'n/a'));
                   if (!dd) {
                     // Tap outside any dropdown closes whatever is open.
                     bcDdCloseAll(null);
@@ -393,22 +369,10 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   // between — a stray toggle can otherwise leave open and shut inverted.
                   if (dd.classList.contains('touch-open')) {
                     dd.classList.remove('touch-open');
-                    bcLog('DD', 'REMOVED touch-open');
                   } else {
                     bcDdCloseAll(dd);
                     dd.classList.add('touch-open');
-                    bcLog('DD', 'ADDED touch-open');
                   }
-                  // Report what the menu ACTUALLY computes to afterwards. If the class
-                  // was removed but this still reads visible, the cause is CSS (sticky
-                  // :hover) rather than the handler — which is the whole question.
-                  try {
-                    var m = dd.querySelector('.dd-menu');
-                    if (m) {
-                      var ms = window.getComputedStyle(m);
-                      bcLog('DD', 'after: visibility=' + ms.visibility + ' opacity=' + ms.opacity);
-                    }
-                  } catch (e) {}
                 }
 
                 // Click NEVER toggles. It exists only to suppress the trigger's
@@ -430,6 +394,35 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
 
                 document.addEventListener('touchend', bcHandleDdTouch, true);
                 document.addEventListener('click', bcHandleDdClick, true);
+
+                // 2.116621.46 — clear any open dropdown across SPA navigation.
+                //
+                // Skilljar routes some navigation through history.pushState rather than
+                // a document load, so the .has-dd element survives and keeps its
+                // touch-open class. Tapping Search from an open Get Started menu left
+                // the menu rendered over the next page. Nothing cleared it: the only
+                // reset paths were a tap outside and a full page load.
+                //
+                // pushState/replaceState are wrapped rather than polled, so the clear
+                // happens in the same task as the navigation. popstate covers Back, and
+                // pagehide covers a real document unload.
+                function bcClearDropdowns() { bcDdCloseAll(null); }
+                try {
+                  var bcPushState = history.pushState;
+                  var bcReplaceState = history.replaceState;
+                  history.pushState = function () {
+                    var r = bcPushState.apply(this, arguments);
+                    bcClearDropdowns();
+                    return r;
+                  };
+                  history.replaceState = function () {
+                    var r = bcReplaceState.apply(this, arguments);
+                    bcClearDropdowns();
+                    return r;
+                  };
+                } catch (e) {}
+                window.addEventListener('popstate', bcClearDropdowns);
+                window.addEventListener('pagehide', bcClearDropdowns);
               } catch (e) {}
 
               try {

@@ -16,13 +16,14 @@ export const COMMUNITY_BACKGROUND = '#1a2444';
 // Delete this flag and constants/communityDiagnostic.ts once the bug is found.
 export const COMMUNITY_DIAGNOSTICS = false;
 
-// TEMPORARY, same contract as COMMUNITY_DIAGNOSTICS. Turns on:
-//   - [BC LAYOUT] logs of the real rendered heights on the Academy landing screen
-//   - [BC DD] logs from the Get Started dropdown touch handler
-//   - [BC NAV] a log every time the blocking onShouldStartLoadWithRequest fires
-// MUST be false for any public release. Set false and the console.logs, the
-// onMessage handler body and the injected bcLog calls all compile out.
-export const ACADEMY_DIAGNOSTICS = true;
+// Academy diagnostics, false for the 2.116621.46 V1 release build.
+//
+// Every consumer has been removed as well, not just switched off: the [BC LAYOUT]
+// onLayout logging in app/(tabs)/index.tsx, the [BC DD] bcLog/bcDesc calls and the
+// [BC NAV] log in components/LMSWebView.tsx, and the onMessage bridge that carried
+// them. Nothing reads this flag any more, so it is retained only as the documented
+// switch to re-instrument from — flipping it true does nothing on its own.
+export const ACADEMY_DIAGNOSTICS = false;
 // Community uses Azure AD B2C — separate from Academy's Skilljar SSO
 export const COMMUNITY_AUTH_URL = 'https://community.board.com/entry/signin?target=https%3A%2F%2Fcommunity.board.com%2F';
 // Community employee login uses Azure AD SAML (Boardway/corporate SSO)

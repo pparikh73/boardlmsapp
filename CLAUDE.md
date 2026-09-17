@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.45`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.46`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -451,6 +451,65 @@ environments *more* alike, not less — it argues against "Skilljar serves us di
 `[BC NAV]` log sits *inside* the Android blocking callback, before its lock is released — so
 turn the flag off before judging the freeze fix on timing.
 
+Version `2.116621.46` is the **Android V1 release candidate** — the first build in this
+sequence that carries no diagnostics and is intended to ship.
+
+**Landing screen: verified, not changed.** The `.44` rebuild is structurally correct and the
+shrink behaviour is provable rather than estimated. Flex shrink is distributed weighted by
+`flexShrink × flexBasis`, so the spacer's weight is `1 × 0 = 0` — it cannot absorb shrink, it
+only gives back the height it grew into. All real shrink therefore lands on `top`
+(`1 × 22%`), and `cards`/`footer` at `flexShrink: 0` are excluded by arithmetic, not by
+having enough room. No fixed heights, no `justifyContent`. **Nothing was trimmed this build**
+— there was no provable defect to fix.
+
+**Get Started dropdown: stopped competing with the hover rule.** `.40`–`.45` all tried to
+*win* against Skilljar's `:hover`, most recently by neutralising `.has-dd:hover .dd-menu`
+inside `@media (hover: none), (pointer: coarse)`. That media query is the weak link: if the
+WebView reports `hover: hover` — a stylus, a connected mouse, or simply a WebView that
+misreports — the neutraliser never matches and sticky `:hover` holds the menu open. That is
+exactly the "closes on outside tap, not on second tap" report, because tapping outside moves
+the sticky hover away.
+
+The rule is now `.has-dd:not(.touch-open) .dd-menu { display: none !important; }`,
+unconditional — no media query to misreport, and `display: none` cannot be overridden by any
+`opacity`/`visibility`/`transform` declaration in the site's hover rule at any specificity.
+The menu is visible **if and only if** `.touch-open` is present, so removing the class always
+closes it. `display` is deliberately **not** set in the open rule: with `:not(.touch-open)`
+no longer matching, the site's own `display` applies, so a `.dd-menu` that is a flex or grid
+container keeps its internal layout.
+
+**Dropdown across SPA navigation.** There was **no** `history` hook anywhere in the injected
+JS — confirmed by grep, not assumed. Skilljar routes some navigation through `pushState`, so
+the `.has-dd` element survived with its `touch-open` class and the menu rendered over the
+next page; the only reset paths were a tap outside and a full document load.
+`history.pushState` and `replaceState` are now wrapped (so the clear runs in the same task as
+the navigation, rather than polled), with `popstate` for Back and `pagehide` for a real
+unload. `handleNavigationChange` also injects the same clear as a native-side fallback,
+placed **above** the `Platform.OS !== 'android'` early return — the dropdown is a touch
+affordance on both platforms and must not be inside that block.
+
+**Diagnostics removed, not just switched off.** `ACADEMY_DIAGNOSTICS = false`, and every
+consumer is deleted: the `[BC LAYOUT]` `onLayout` logging and the `logLayout` helper in
+`app/(tabs)/index.tsx`, the `[BC DD]` `bcLog`/`bcDesc` definitions and call sites, the
+`[BC NAV]` log inside the Android blocking callback, and the `onMessage` bridge that carried
+them (nothing else in `LMSWebView.tsx` posts, so the prop is gone entirely). A repo-wide grep
+for `ACADEMY_DIAGNOSTICS`, `[BC `, `bcLog` and `logLayout` returns no hits in app code.
+`COMMUNITY_DIAGNOSTICS` is `false` and `community.tsx` interpolates
+`${COMMUNITY_DIAGNOSTICS ? COMMUNITY_DIAGNOSTIC_JS : ''}`, so the overlay compiles to an
+empty string and its `onMessage` handler early-returns — **no debug UI reaches a user on
+either tab.**
+
+Note `constants/communityDiagnostic.ts` still exists and is still imported, so its ~5 KB
+string is bundled although never injected. Harmless, and kept deliberately: it is the tool
+to reach for if the Community white space regresses.
+
+`ACADEMY_DIAGNOSTICS` is now read by nothing, so flipping it back to `true` does nothing on
+its own — re-instrumenting means re-adding call sites.
+
+**Still untested on device at time of writing**: the landing screen rebuild (`.44`), the
+dropdown close rule, and the SPA-navigation clear. The search-freeze fix from `.45` is also
+unconfirmed on device.
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -577,10 +636,19 @@ been started yet.
   overflowed every time because the logo's size was an *input* to the layout. Give the image
   `flex: 1` + a relative `width` + `resizeMode="contain"` and let its height fall out of the
   space that is actually left. Applies to any full-bleed art in a height-constrained screen.
-- **`:hover` sticks on Android until you tap elsewhere.** Any hover-revealed UI needs its
-  hover rule neutralised under `@media (hover: none), (pointer: coarse)` before a
-  touch-driven class can control it — otherwise removing the class looks like it does
-  nothing, while tapping elsewhere appears to work.
+- **`:hover` sticks on Android until you tap elsewhere**, and you cannot reliably win that
+  fight by competing with the site's hover rule. `@media (hover: none), (pointer: coarse)`
+  is not dependable — a stylus, a connected mouse or a WebView that misreports leaves the
+  neutraliser inert and the menu stuck open, which reads as "removing the class does
+  nothing" while tapping elsewhere appears to work. Make the closed state
+  `display: none !important` on `:not(.your-class)`, unconditionally: no media query to
+  misreport, and no `opacity`/`visibility`/`transform` declaration can override `display`.
+  Do not set `display` in the open rule, or a flex/grid menu loses its internal layout.
+- **Skilljar navigates via `history.pushState`, so in-page state survives a "page change".**
+  Anything toggled by a class on a long-lived element (an open dropdown) must be cleared by
+  wrapping `pushState`/`replaceState` and listening for `popstate`/`pagehide`. A full page
+  load is not the only navigation. Clear from `onNavigationStateChange` too, and put that
+  call above any platform early-return.
 - **Every `MutationObserver` callback must be behind a frame guard — check them ALL, in
   BOTH injected scripts.** `.38` coalesced two and missed `plObserver`; `.43` then caught
   that one but still grepped only `injectedJavaScript`, missing the observer in

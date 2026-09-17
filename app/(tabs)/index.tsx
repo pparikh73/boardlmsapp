@@ -7,13 +7,12 @@ import {
   Linking,
   StatusBar,
   Image,
-  type LayoutChangeEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, router, useNavigation } from 'expo-router';
 import LMSWebView, { LMSWebViewHandle } from '../../components/LMSWebView';
 import { getSession, getCachedSession, logout, type Session } from '../../services/auth';
-import { BRAND, AUTH_URLS, TAB_URLS, SUPPORT_EMAIL, ACADEMY_DIAGNOSTICS } from '../../constants/skilljar';
+import { BRAND, AUTH_URLS, TAB_URLS, SUPPORT_EMAIL } from '../../constants/skilljar';
 
 // Colors for the auth cards — derived from Board brand assets
 const CARD_COLORS = {
@@ -63,16 +62,6 @@ export default function AcademyTab() {
     }, []),
   );
 
-  // TEMPORARY instrumentation (ACADEMY_DIAGNOSTICS). Kept across the .44 rebuild
-  // so the new layout can be confirmed from real device numbers rather than a dp
-  // model. The question it answers in one line: does `cards` y + h stay inside
-  // `container` h? If it does, nothing is off-screen and nothing needs scrolling.
-  const logLayout = (name: string) => (e: LayoutChangeEvent) => {
-    if (!ACADEMY_DIAGNOSTICS) return;
-    const { height, y } = e.nativeEvent.layout;
-    console.log(`[BC LAYOUT] ${name} h=${Math.round(height)} y=${Math.round(y)}`);
-  };
-
   // Tapping the Academy tab while already on it returns to the home page
   useEffect(() => {
     const unsubscribe = navigation.addListener('tabPress' as any, () => {
@@ -114,15 +103,14 @@ export default function AcademyTab() {
   // costing up to 48dp of content height on gesture-nav Android for nothing.
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <View style={styles.container} onLayout={logLayout('container')}>
+      <View style={styles.container}>
         {/* Top section — logo + subtitle. Sized as a fraction of the container,
             never in dp, and the first content to give up space under pressure. */}
-        <View style={styles.top} onLayout={logLayout('top')}>
+        <View style={styles.top}>
           <Image
             source={require('../../assets/Board Academy logo.png')}
             style={styles.logo}
             resizeMode="contain"
-            onLayout={logLayout('logo')}
           />
           <Text style={styles.subtitle}>Choose how you'd like to sign in</Text>
         </View>
@@ -134,7 +122,7 @@ export default function AcademyTab() {
         <View style={styles.spacer} />
 
         {/* Auth cards — flexShrink: 0, so these three are always fully on screen. */}
-        <View style={styles.cards} onLayout={logLayout('cards')}>
+        <View style={styles.cards}>
           <TouchableOpacity
             style={[styles.card, {
               backgroundColor: CARD_COLORS.customerBg,
@@ -183,7 +171,6 @@ export default function AcademyTab() {
 
         <TouchableOpacity
           style={styles.footer}
-          onLayout={logLayout('footer')}
           onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
         >
           <Text style={styles.footerText}>Need help? {SUPPORT_EMAIL}</Text>
