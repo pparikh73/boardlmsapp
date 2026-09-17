@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.49`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.50`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -682,6 +682,43 @@ than `.41` did and so cannot move it away from the working state: the menu-exist
 navigating rather than to nothing) and `fixHeaderOverlap` skipping any header child that
 contains a `.dd-menu` when it forces `position: static`.
 
+Version `2.116621.50` adds a once-per-navigation dropdown clear on the native side, as a
+backstop for `touch-open` surviving a navigation to the Search page. Purely additive — one
+file, 30 inserted lines, nothing removed.
+
+`handleNavigationChange` now carries:
+
+    if (nav.loading === false && nav.url !== lastUrlRef.current) {
+      lastUrlRef.current = nav.url;
+      webViewRef.current?.injectJavaScript(
+        "document.querySelectorAll('.has-dd.touch-open').forEach(...remove('touch-open')); true;"
+      );
+    }
+
+with a new `lastUrlRef`. That ref is **not** `lastBouncedRef`: that one tracks only
+off-domain URLs and is reset to `null` on every allowed one, so it cannot double as a
+previous-URL tracker.
+
+**This is deliberately not the `.46` version, and the difference is the whole point.** `.46`
+fired on every state change including `loading === true`, which is two or more
+`evaluateJavascript` round trips per navigation on the Android UI thread — that is what made
+Back feel slow. This fires on the `loading === false` edge only, and only when the URL
+actually changed, so it costs at most **one** bridge call per navigation and none when a
+navigation re-reports the same URL. Placed above the Android early-return, since the
+dropdown is a touch affordance on both platforms.
+
+**Scope, recorded honestly so the next person does not over-trust it.** The reported
+mechanism was that the WebView paints the old DOM snapshot briefly before the new page
+renders. If that is what is happening, this cannot be the cure: clearing a class on the new
+DOM after it has painted cannot affect a snapshot of the old one, and a genuine full document
+load re-injects the scripts into a fresh DOM that never had `touch-open` — so on that path
+this call is a **no-op**. It earns its place on the paths where the document is *reused* — a
+`pushState` route the in-page hooks somehow miss, or a same-document navigation — and as a
+cheap backstop that cannot regress Back-button latency the way the unconditional version did.
+If the overlay is still reported after this, the remaining suspect is the paint transition
+itself, not the class, and the next thing to look at is `style.backgroundColor` on the
+WebView rather than more JavaScript.
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -834,7 +871,11 @@ been started yet.
   also clear from `onNavigationStateChange`: `.46` did, and since that callback fires more
   than once per navigation and each `injectJavaScript` is an `evaluateJavascript` round trip
   on the Android UI thread, it made the Back button visibly slow. **Never put an
-  unconditional `injectJavaScript` on the navigation path.**
+  unconditional `injectJavaScript` on the navigation path.** If you need one there, gate it
+  the way `.50` does — `nav.loading === false` **and** the URL actually changed against a
+  dedicated ref — so it costs at most one bridge call per navigation. And note what such a
+  clear can and cannot do: a real document load re-injects into a fresh DOM that never had
+  the class, so it is a no-op there; it only matters when the document is reused.
 - **Never `preventDefault()` a control's native behaviour unless you can deliver the
   replacement.** The capture-phase dropdown handler suppressed the Get Started link's
   navigation on every tap, then relied on a class toggle whose visible effect depended on a

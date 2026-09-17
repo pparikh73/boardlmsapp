@@ -54,6 +54,11 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
     // navigation produces (loading true, then false) are only acted on once.
     const lastBouncedRef = useRef<string | null>(null);
 
+    // 2.116621.50 — last URL we have cleared dropdowns for. Distinct from
+    // lastBouncedRef, which only tracks OFF-DOMAIN urls and is reset to null on every
+    // allowed one, so it cannot double as a previous-URL tracker.
+    const lastUrlRef = useRef<string | null>(null);
+
     function handleNavigationChange(nav: WebViewNavigation) {
       if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
         onLogout?.();
@@ -73,6 +78,31 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
       // is: pushState and replaceState are wrapped, popstate covers Back, pagehide
       // covers unload — and a real document load re-injects the scripts from scratch,
       // so touch-open cannot survive one anyway. Nothing is lost by deleting this.
+
+      // 2.116621.50 — clear any stale open dropdown ONCE per completed navigation.
+      //
+      // This is deliberately not the .46 version. That one fired on EVERY state change
+      // including loading === true, which is two or more evaluateJavascript round trips
+      // per navigation on the Android UI thread and is what made Back feel slow. This
+      // fires on the loading === false edge only, and only when the URL actually
+      // changed, so it costs at most ONE bridge call per navigation and none at all
+      // when a navigation re-reports the same URL.
+      //
+      // Placed above the Android early-return below: the dropdown is a touch
+      // affordance on both platforms, so this must not sit inside that block.
+      //
+      // Scope note for whoever reads this next: on a genuine full document load the
+      // scripts are re-injected into a fresh DOM that never had touch-open, so this
+      // call is a no-op there. It earns its place on the paths where the document is
+      // reused — a pushState route that the in-page hooks somehow miss, or a
+      // same-document navigation — and as a cheap backstop that cannot regress the
+      // Back-button latency the way the unconditional version did.
+      if (nav.loading === false && nav.url !== lastUrlRef.current) {
+        lastUrlRef.current = nav.url;
+        webViewRef.current?.injectJavaScript(
+          "document.querySelectorAll('.has-dd.touch-open').forEach(function(el){el.classList.remove('touch-open');}); true;"
+        );
+      }
 
       // ANDROID allowlist enforcement lives here, not in onShouldStartLoadWithRequest.
       // That callback BLOCKS the Android WebView thread for up to 250ms per navigation
