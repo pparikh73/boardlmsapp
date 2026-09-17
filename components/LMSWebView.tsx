@@ -1066,6 +1066,26 @@ const styles = StyleSheet.create({
   },
   webview: {
     flex: 1,
+    // 2.116621.51 — backdrop for the Academy WebView, behind anything the page has
+    // not painted yet. react-native-webview has NO backgroundColor prop (verified
+    // against the installed WebViewTypes.d.ts — passing one fails typecheck); it reads
+    // style.backgroundColor and forwards it to the native setter, which assigns
+    // _webView.scrollView.backgroundColor. Same mechanism community.tsx already uses
+    // via COMMUNITY_BACKGROUND.
+    //
+    // #ffffff is derived from repo evidence, not measured: academy.board.com could not
+    // be reached from this environment, but the injected rule above sets
+    // .scorm-lesson-content and every iframe to #ffffff explicitly "for a less jarring
+    // transition", which only makes sense if the surrounding page is white, and
+    // Skilljar's stock theme is light.
+    //
+    // READ THIS BEFORE EXPECTING IT TO FIX ANYTHING: the native backdrop ALREADY
+    // defaults to white on both platforms, so this is a no-op for the white flash. It
+    // is here to make the intent explicit and to survive a future default change, not
+    // because it changes current behaviour. If the flash needs to stop being white, the
+    // value has to differ from the page background — which trades a white flash for a
+    // coloured one.
+    backgroundColor: BRAND.white,
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

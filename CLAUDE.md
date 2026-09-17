@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.50`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.51`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -719,6 +719,40 @@ If the overlay is still reported after this, the remaining suspect is the paint 
 itself, not the class, and the next thing to look at is `style.backgroundColor` on the
 WebView rather than more JavaScript.
 
+Version `2.116621.51` sets `style.backgroundColor` on the Academy WebView to
+`BRAND.white`. One line of style plus its comment; nothing else touched.
+
+**The `backgroundColor` prop was NOT added, and must not be.** It does not exist — verified
+against the installed `WebViewTypes.d.ts`, which matches the long-standing note in this file.
+Passing one fails typecheck, so adding it would have broken the "typecheck identical to
+baseline" gate this build was held to. `style.backgroundColor` is the real mechanism: RN
+forwards it to the native setter, which assigns `_webView.scrollView.backgroundColor`. Same
+route `community.tsx` already uses via `COMMUNITY_BACKGROUND`.
+
+**The value is derived, not measured.** `academy.board.com` is unreachable from the build
+environment (the agent proxy returns `CONNECT tunnel failed, 403`), so `#ffffff` comes from
+repo evidence: the injected rule sets `.scorm-lesson-content` and every `iframe` to
+`#ffffff` explicitly "for a less jarring transition", which only makes sense if the
+surrounding page is white, and Skilljar's stock theme is light. If anyone can read the real
+computed `background-color` off the live site, confirm it against this.
+
+**Two things this will not do, stated plainly so the next round does not bank on it.**
+
+1. **It is a no-op for the white flash.** The native scroll-view backdrop already defaults to
+   white on both platforms — that is exactly why white is what shows through. Setting it to
+   white explicitly changes nothing today; it documents the intent and survives a future
+   default change. Making the flash non-white requires a value that *differs* from the page
+   background, which trades a white flash for a coloured one.
+2. **It cannot hide the dropdown overlay.** A backdrop paints *behind* page content. If the
+   WebView is showing a stale dropdown, that dropdown is painted content and no backdrop
+   colour sits in front of it. So this does not address the reported overlay.
+
+If the overlay survives this build, the remaining honest options are: confirm whether the
+Search navigation is genuinely a full document load (if it is, the scripts re-inject into a
+fresh DOM and `touch-open` cannot be the cause at all, which would mean the overlay is a
+compositor artefact rather than DOM state), or stop hijacking the Get Started control on
+Android and let it navigate to learning-paths as the site intends.
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -761,7 +795,9 @@ been started yet.
   scrolling. Removing the horizontal *scrollable area* (the `overflow-x: clip` rule above)
   is the only thing that fixes this class of bug.
 - **`react-native-webview` has no `backgroundColor` prop** — passing one is silently
-  ignored (and fails typecheck). Set `style.backgroundColor`; RN forwards it to the native
+  ignored (and fails typecheck). Re-verified against the installed `WebViewTypes.d.ts` in
+  `.51`, so do not add it "as well as" the style, however the request is phrased.
+  Set `style.backgroundColor`; RN forwards it to the native
   setter, which assigns `_webView.scrollView.backgroundColor` and toggles `drawsBackground`
   (`RNCWebViewImpl.m`). That scroll view's backdrop defaults to **white** and is what shows
   through wherever the page doesn't paint — so it's worth setting to the site's own
