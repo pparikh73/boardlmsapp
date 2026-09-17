@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 're
 import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform } from 'react-native';
 import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
-import { BRAND, WEBVIEW_USER_AGENT, isAllowedWebViewUrl } from '../constants/skilljar';
+import { BRAND, WEBVIEW_USER_AGENT, isAllowedWebViewUrl, ACADEMY_DIAGNOSTICS } from '../constants/skilljar';
 
 interface LMSWebViewProps {
   url: string;
@@ -59,15 +59,20 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
         onLogout?.();
       }
 
-      // Belt-and-braces for the dropdown-across-navigation fix. The injected
-      // history.pushState/replaceState hooks are the primary mechanism; this covers
-      // any navigation that reaches the native side without going through them.
-      // Deliberately ABOVE the Android-only block below — the dropdown is a touch
-      // affordance on both platforms, so this must not be inside that early return.
-      webViewRef.current?.injectJavaScript(
-        `(function(){try{var o=document.querySelectorAll('.has-dd.touch-open');` +
-        `for(var i=0;i<o.length;i++){o[i].classList.remove('touch-open');}}catch(e){}})();true;`
-      );
+      // 2.116621.48 — the dropdown-clearing injectJavaScript that .46 put here is
+      // GONE, and that is the Back-button latency fix.
+      //
+      // It ran unconditionally on EVERY navigation state change, before any early
+      // return. This callback fires more than once per navigation (see lastBouncedRef
+      // above: loading true, then false), and each injectJavaScript is a bridge call
+      // that becomes an evaluateJavascript on the Android UI thread — so every
+      // navigation, Back included, carried two or more extra round trips for work
+      // that was already done.
+      //
+      // It was also redundant. The injected hooks cover every navigation form there
+      // is: pushState and replaceState are wrapped, popstate covers Back, pagehide
+      // covers unload — and a real document load re-injects the scripts from scratch,
+      // so touch-open cannot survive one anyway. Nothing is lost by deleting this.
 
       // ANDROID allowlist enforcement lives here, not in onShouldStartLoadWithRequest.
       // That callback BLOCKS the Android WebView thread for up to 250ms per navigation
@@ -164,6 +169,15 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
             setRefreshing(false);
           }}
           onNavigationStateChange={handleNavigationChange}
+          // TEMPORARY for 2.116621.48 — carries the dropdown probe only. Compiles out
+          // with ACADEMY_DIAGNOSTICS false, which is required before release.
+          onMessage={(event) => {
+            if (!ACADEMY_DIAGNOSTICS) return;
+            try {
+              const data = JSON.parse(event.nativeEvent.data);
+              if (data && data.dd) console.log(`[BC DD] ${data.dd}`);
+            } catch {}
+          }}
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
@@ -370,6 +384,30 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 // straight back — the menu looked like it would not close. touchend is
                 // sufficient on mobile, so click no longer participates in the toggle
                 // at all and there is no timing window left to get wrong.
+                // TEMPORARY probe for 2.116621.48, gated by ACADEMY_DIAGNOSTICS.
+                // Answers in one message: did touchend fire, what was tapped, did
+                // .has-dd match, does a .dd-menu exist inside it, and does any ancestor
+                // carry pointer-events: none. Set the flag false to compile it out.
+                function bcProbe(msg) {
+                  try {
+                    if (window.ReactNativeWebView) {
+                      window.ReactNativeWebView.postMessage(JSON.stringify({ dd: msg }));
+                    }
+                  } catch (e) {}
+                }
+                function bcPeNoneAncestor(el) {
+                  try {
+                    var n = el, d = 0;
+                    while (n && n !== document.body && d < 12) {
+                      if (window.getComputedStyle(n).pointerEvents === 'none') {
+                        return n.tagName + '.' + (typeof n.className === 'string' ? n.className.slice(0, 40) : '');
+                      }
+                      n = n.parentElement; d++;
+                    }
+                  } catch (e) {}
+                  return 'none';
+                }
+
                 function bcDdCloseAll(except) {
                   var open = document.querySelectorAll('.has-dd.touch-open');
                   for (var i = 0; i < open.length; i++) {
@@ -382,6 +420,11 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   if (!t || typeof t.closest !== 'function') return;
 
                   var dd = t.closest('.has-dd');
+                  bcProbe('touchend tag=' + t.tagName +
+                          ' cls=' + (typeof t.className === 'string' ? t.className.slice(0, 50) : '') +
+                          ' hasDd=' + (dd ? 'YES' : 'NO') +
+                          ' ddMenu=' + (dd && dd.querySelector('.dd-menu') ? 'YES' : 'NO') +
+                          ' peNone=' + bcPeNoneAncestor(t));
                   if (!dd) {
                     // Tap outside any dropdown closes whatever is open.
                     bcDdCloseAll(null);
@@ -393,8 +436,33 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   // the menu does not close under the finger mid-tap.
                   if (t.closest('.dd-menu')) return;
 
-                  // The trigger itself must not navigate: opening the menu is the
-                  // whole point of the tap.
+                  // 2.116621.48 — THIS IS THE FIX FOR THE DEAD BUTTON.
+                  //
+                  // The trigger was never dead to touch. It was NEUTERED: this handler
+                  // is registered on document in the CAPTURE phase, so it runs before
+                  // the event reaches the target, and it called preventDefault() plus
+                  // stopPropagation() UNCONDITIONALLY on any trigger whose href contains
+                  // learning-paths. That destroys the control's only native behaviour —
+                  // navigating — and substitutes ours, which produces a visible result
+                  // only if a menu element actually exists inside this .has-dd and our
+                  // CSS matches it. When it does not, the tap does nothing whatsoever,
+                  // which is exactly the "completely unresponsive" report. It also
+                  // explains why this broke in EVERY build that touched the dropdown
+                  // CSS: each one kept this unconditional suppression while its own CSS
+                  // variant failed to reveal the menu for a different reason.
+                  //
+                  // So: find the menu FIRST, and if there is nothing to open, return
+                  // before touching the event at all. The worst case is now that the
+                  // button behaves exactly as it would if this script had never run.
+                  // It can no longer be made less functional than untouched.
+                  var menu = dd.querySelector('.dd-menu');
+                  if (!menu) {
+                    bcProbe('no .dd-menu inside .has-dd - leaving trigger alone');
+                    return;
+                  }
+
+                  // Only now, with a menu we can actually show, suppress the trigger's
+                  // navigation: opening the menu is the whole point of the tap.
                   var a = t.closest('a');
                   if (a && (a.getAttribute('href') || '').indexOf('learning-paths') !== -1) {
                     e.preventDefault();
@@ -421,7 +489,11 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   if (!t || typeof t.closest !== 'function') return;
                   // Menu links must stay clickable — check this before anything else.
                   if (t.closest('.dd-menu')) return;
-                  if (!t.closest('.has-dd')) return;
+                  var ddc = t.closest('.has-dd');
+                  if (!ddc) return;
+                  // Same rule as the touch handler: if there is no menu to open, this
+                  // click is the control's real behaviour and must not be swallowed.
+                  if (!ddc.querySelector('.dd-menu')) return;
                   var a = t.closest('a');
                   if (a && (a.getAttribute('href') || '').indexOf('learning-paths') !== -1) {
                     e.preventDefault();
@@ -868,7 +940,17 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                     // to DIRECT children: a dropdown panel deeper in the tree is
                     // legitimately absolute and must stay that way to open correctly.
                     for (var j = 0; j < kids.length; j++) {
-                      if (kidAbsolute[j]) kids[j].style.setProperty('position', 'static', 'important');
+                      // Skip any direct child that hosts a dropdown. Forcing an
+                      // absolutely-positioned element into flow puts it back in the
+                      // layout, where it can take real space over the nav and swallow
+                      // touches — and a dropdown host is precisely the element that is
+                      // absolute on purpose. PRECAUTIONARY, not a proven cause of the
+                      // dead button; the proven cause is the unconditional
+                      // preventDefault above. Costs nothing and removes a way for this
+                      // pass to break the control it sits next to.
+                      if (kidAbsolute[j] && !kids[j].querySelector('.dd-menu')) {
+                        kids[j].style.setProperty('position', 'static', 'important');
+                      }
                     }
 
                     // Logo: height-driven so it scales instead of being clipped, and

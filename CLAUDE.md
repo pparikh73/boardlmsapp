@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.47`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.48`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -574,6 +574,71 @@ previous page and the alternative is a blank WebView.
 Also note a real document load re-injects the scripts from scratch, so `touch-open` cannot
 survive one; the `.46` history hooks only matter for genuine `pushState` routes.
 
+Version `2.116621.48` — `.47` confirmed the login screen, search freeze and Community white
+space fixed. Three items remained. **This build carries a probe: `ACADEMY_DIAGNOSTICS` is
+`true` again.** Set it false before the release build; that one line compiles the probe out.
+
+**1. Get Started "completely unresponsive" — the trigger was NEUTERED, not dead.**
+
+The CSS was never the cause, which is why `.40`–`.47` kept failing: every one of them changed
+the CSS and left the real defect untouched. Ruling the CSS out first, `pointer-events: none`
+appears exactly once, in a rule whose **subject is `.dd-menu`** — `.has-dd` is only an
+ancestor in the selector, and no rule anywhere sets `pointer-events`, `display` or
+`visibility` on `.has-dd`, `header`, `nav` or `body`.
+
+The defect is in the handler. `bcHandleDdTouch` is registered on `document` in the **capture
+phase**, so it runs before the event reaches the target, and it called `preventDefault()` +
+`stopPropagation()` **unconditionally** on any trigger whose href contains `learning-paths`.
+That destroys the control's only native behaviour — navigating — and substitutes ours, which
+produces a visible result *only if* a menu element exists inside that `.has-dd` and our CSS
+matches it. When it does not, the tap does nothing at all. **A button that neither navigates
+nor opens anything is indistinguishable from a dead button**, and that is the report.
+
+It also explains the pattern exactly: this broke in every build that touched the dropdown
+CSS because every one of those builds kept the unconditional suppression while its own CSS
+variant failed to reveal the menu for its own separate reason.
+
+The fix is to look for the menu **first** and return before touching the event if there is
+nothing to open. The worst case is now that the control behaves exactly as if this script had
+never run. **It can no longer be made less functional than untouched** — which is the
+property that should have been there from `.40`. Applied to the click handler too, so a
+click is never swallowed when we cannot replace it.
+
+One precautionary change alongside it: `fixHeaderOverlap` forced `position: static` on every
+absolutely-positioned **direct child** of the header, and it now skips any child that
+contains a `.dd-menu`. Pushing an absolutely-positioned element back into flow gives it real
+layout space where it can cover the nav and swallow touches — and a dropdown host is
+precisely the element that is absolute on purpose. **Not a proven cause**; the proven cause
+is the `preventDefault` above. It costs nothing and removes a way for this pass to break the
+control beside it.
+
+The probe reports, in one message per tap: whether `touchend` fired, the tag and class
+tapped, whether `.has-dd` matched, whether a `.dd-menu` exists inside it, and the first
+ancestor computing `pointer-events: none`. If it shows `hasDd=YES ddMenu=NO`, the class name
+is wrong and the selector needs correcting — the button will still navigate normally in the
+meantime.
+
+**2. White page on Get Started → Search — the prescribed fix is already in place.**
+`hasLoadedOnceRef` is set on the first `onLoadEnd` and `onLoadStart` only calls
+`setLoading(true)` when it is false, so after the first load the overlay never renders again
+regardless of what triggers `onLoadStart` — exactly the requested behaviour, shipped in
+`.47`. The history hooks are confirmed intact (`pushState`, `replaceState`, `popstate`,
+`pagehide`). **No further change was made, because none could be justified**: with the
+overlay ruled out, the residual white is the WebView's own blank-document paint during a real
+navigation, which is native behaviour and not something the overlay logic controls.
+
+**3. Back button slow — caused by a bridge round trip I added in `.46`.**
+`handleNavigationChange` called `injectJavaScript` **unconditionally on every navigation
+state change**, before any early return, to clear stale dropdowns. That callback fires more
+than once per navigation (the `lastBouncedRef` comment in the same function says so: loading
+true, then false), and each `injectJavaScript` becomes an `evaluateJavascript` on the Android
+UI thread — so every navigation, Back included, carried two or more extra round trips.
+
+It was also **redundant**: the injected hooks already cover every navigation form —
+`pushState`/`replaceState` wrapped, `popstate` for Back, `pagehide` for unload — and a real
+document load re-injects the scripts from scratch, so `touch-open` cannot survive one. The
+call is deleted. Nothing is lost.
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -714,8 +779,18 @@ been started yet.
 - **Skilljar navigates via `history.pushState`, so in-page state survives a "page change".**
   Anything toggled by a class on a long-lived element (an open dropdown) must be cleared by
   wrapping `pushState`/`replaceState` and listening for `popstate`/`pagehide`. A full page
-  load is not the only navigation. Clear from `onNavigationStateChange` too, and put that
-  call above any platform early-return.
+  load is not the only navigation. Those in-page hooks are sufficient on their own — do NOT
+  also clear from `onNavigationStateChange`: `.46` did, and since that callback fires more
+  than once per navigation and each `injectJavaScript` is an `evaluateJavascript` round trip
+  on the Android UI thread, it made the Back button visibly slow. **Never put an
+  unconditional `injectJavaScript` on the navigation path.**
+- **Never `preventDefault()` a control's native behaviour unless you can deliver the
+  replacement.** The capture-phase dropdown handler suppressed the Get Started link's
+  navigation on every tap, then relied on a class toggle whose visible effect depended on a
+  menu element and a CSS match. When either was missing the button neither navigated nor
+  opened — a dead control, reported four builds running as "unresponsive" and misdiagnosed as
+  CSS every time. Look for what you intend to show FIRST and return untouched if it is not
+  there. A hijacked control must degrade to its original behaviour, never to nothing.
 - **Every `MutationObserver` callback must be behind a frame guard — check them ALL, in
   BOTH injected scripts.** `.38` coalesced two and missed `plObserver`; `.43` then caught
   that one but still grepped only `injectedJavaScript`, missing the observer in
