@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 're
 import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform } from 'react-native';
 import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
-import { BRAND, WEBVIEW_USER_AGENT, isAllowedWebViewUrl, ACADEMY_DIAGNOSTICS } from '../constants/skilljar';
+import { BRAND, WEBVIEW_USER_AGENT, isAllowedWebViewUrl } from '../constants/skilljar';
 
 interface LMSWebViewProps {
   url: string;
@@ -169,15 +169,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
             setRefreshing(false);
           }}
           onNavigationStateChange={handleNavigationChange}
-          // TEMPORARY for 2.116621.48 — carries the dropdown probe only. Compiles out
-          // with ACADEMY_DIAGNOSTICS false, which is required before release.
-          onMessage={(event) => {
-            if (!ACADEMY_DIAGNOSTICS) return;
-            try {
-              const data = JSON.parse(event.nativeEvent.data);
-              if (data && data.dd) console.log(`[BC DD] ${data.dd}`);
-            } catch {}
-          }}
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
@@ -338,33 +329,37 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 // "Get Started" dropdown on touch. Skilljar reveals .dd-menu on
                 // :hover, which a touch device never produces — the tap instead
                 // follows the trigger's href straight to learning-paths, so the menu
-                // is unreachable on mobile. A class the handler below toggles drives
-                // it instead.
+                // is unreachable on mobile. Mirror the hover state with a class the
+                // handler below toggles.
                 //
-                // 2.116621.47 — display is NOT used. .46 set display: none on the
-                // closed rule and the Get Started control went completely unresponsive
-                // on device, so that declaration is reverted. The menu is hidden with opacity + visibility
-                // + pointer-events only.
+                // 2.116621.49 — RESTORED to the 2.116621.41 rule, which is the last
+                // state confirmed working on device (menu opened on first tap, closed
+                // on an outside tap).
                 //
-                // This is still deterministic against Android's sticky :hover, which is
-                // what .40-.45 kept losing to. The reason is the selector pair, not the
-                // property: :not(.touch-open) and .touch-open are MUTUALLY EXCLUSIVE,
-                // so exactly one of them matches at any moment and they never compete
-                // with each other. Both are (0,3,0), the same specificity as the site's
-                // own .has-dd:hover .dd-menu, and this stylesheet is appended to <head>
-                // after the site's — so source order decides and ours wins either way.
-                // visibility: hidden !important on the closed rule therefore beats the
-                // hover rule whether or not :hover is stuck, which is exactly what .43
-                // and .45 needed the @media (hover: none) block for. That media query is
-                // gone: it was the weak link, since a WebView reporting hover: hover
-                // silently made the whole neutraliser inert.
+                // THERE IS DELIBERATELY NO CLOSED-STATE RULE. That is the whole fix.
+                // .41 only ever forced the menu OPEN; the site's own CSS did all the
+                // hiding. .43 added a closed-state rule, .46 made it
+                // display: none !important, .47 and .48 made it
+                // opacity/visibility/pointer-events — and from .46 on the Get Started
+                // control was completely unresponsive on device.
+                //
+                // Why a closed-state rule on .dd-menu kills the TRIGGER: visibility
+                // and pointer-events both INHERIT to descendants. If Skilljar's
+                // .dd-menu is a wrapper that contains the trigger rather than a sibling
+                // of it, hiding .dd-menu hides and disables the trigger with it. That
+                // fits every observation: three different hiding properties, three
+                // identical dead-button reports, and a handler that is byte-identical
+                // to the version that worked.
+                //
+                // So do not add a closed-state rule here again. The known cost is that
+                // a second tap may not close the menu (Android's sticky :hover keeps
+                // the site's own hover rule matching) — that is the .41 behaviour, it
+                // is a far smaller problem than an unusable control, and it must not be
+                // "fixed" by hiding .dd-menu from a stylesheet. An inline style on the
+                // menu element is NOT a safe alternative either: it inherits exactly
+                // the same way.
                 var ddStyle = document.createElement('style');
                 ddStyle.textContent =
-                  '.has-dd:not(.touch-open) .dd-menu {' +
-                  '  opacity: 0 !important;' +
-                  '  visibility: hidden !important;' +
-                  '  pointer-events: none !important;' +
-                  '}' +
                   '.has-dd.touch-open .dd-menu {' +
                   '  opacity: 1 !important;' +
                   '  visibility: visible !important;' +
@@ -384,30 +379,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 // straight back — the menu looked like it would not close. touchend is
                 // sufficient on mobile, so click no longer participates in the toggle
                 // at all and there is no timing window left to get wrong.
-                // TEMPORARY probe for 2.116621.48, gated by ACADEMY_DIAGNOSTICS.
-                // Answers in one message: did touchend fire, what was tapped, did
-                // .has-dd match, does a .dd-menu exist inside it, and does any ancestor
-                // carry pointer-events: none. Set the flag false to compile it out.
-                function bcProbe(msg) {
-                  try {
-                    if (window.ReactNativeWebView) {
-                      window.ReactNativeWebView.postMessage(JSON.stringify({ dd: msg }));
-                    }
-                  } catch (e) {}
-                }
-                function bcPeNoneAncestor(el) {
-                  try {
-                    var n = el, d = 0;
-                    while (n && n !== document.body && d < 12) {
-                      if (window.getComputedStyle(n).pointerEvents === 'none') {
-                        return n.tagName + '.' + (typeof n.className === 'string' ? n.className.slice(0, 40) : '');
-                      }
-                      n = n.parentElement; d++;
-                    }
-                  } catch (e) {}
-                  return 'none';
-                }
-
                 function bcDdCloseAll(except) {
                   var open = document.querySelectorAll('.has-dd.touch-open');
                   for (var i = 0; i < open.length; i++) {
@@ -420,11 +391,6 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   if (!t || typeof t.closest !== 'function') return;
 
                   var dd = t.closest('.has-dd');
-                  bcProbe('touchend tag=' + t.tagName +
-                          ' cls=' + (typeof t.className === 'string' ? t.className.slice(0, 50) : '') +
-                          ' hasDd=' + (dd ? 'YES' : 'NO') +
-                          ' ddMenu=' + (dd && dd.querySelector('.dd-menu') ? 'YES' : 'NO') +
-                          ' peNone=' + bcPeNoneAncestor(t));
                   if (!dd) {
                     // Tap outside any dropdown closes whatever is open.
                     bcDdCloseAll(null);
@@ -456,10 +422,7 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   // button behaves exactly as it would if this script had never run.
                   // It can no longer be made less functional than untouched.
                   var menu = dd.querySelector('.dd-menu');
-                  if (!menu) {
-                    bcProbe('no .dd-menu inside .has-dd - leaving trigger alone');
-                    return;
-                  }
+                  if (!menu) return;
 
                   // Only now, with a menu we can actually show, suppress the trigger's
                   // navigation: opening the menu is the whole point of the tap.

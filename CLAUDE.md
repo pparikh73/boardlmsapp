@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.48`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.49`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -639,6 +639,49 @@ It was also **redundant**: the injected hooks already cover every navigation for
 document load re-injects the scripts from scratch, so `touch-open` cannot survive one. The
 call is deleted. Nothing is lost.
 
+Version `2.116621.49` restores the Get Started dropdown to its last state confirmed working
+on device, found by `git diff` rather than by reasoning about it again. Only the dropdown
+changed; the search, login, Community, allowlist and Back-button fixes are untouched.
+`ACADEMY_DIAGNOSTICS` is back to `false` and the `.48` probe is deleted — the history
+answered what it was for.
+
+**The diff that settles it.** `f545add` is `2.116621.41`, the build the tester described as
+"dropdown appeared on first tap, closed on an outside tap, only the second tap failed".
+Against `.48` the handler is **byte-identical** apart from `.48`'s menu-exists guard. The
+**only** substantive difference is the CSS:
+
+- `.41`: one rule, `.has-dd.touch-open .dd-menu { opacity: 1; visibility: visible;
+  transform: translateY(0); pointer-events: auto }` — all `!important`. **No closed-state
+  rule at all.** Our stylesheet only ever forced the menu OPEN; the site's own CSS did every
+  bit of the hiding.
+- `.43` added a closed-state rule (inside `@media (hover: none)`), `.46` made it
+  `display: none !important`, `.47` and `.48` made it
+  `opacity: 0 / visibility: hidden / pointer-events: none !important`. Every build from
+  `.46` on was reported as a completely unresponsive control.
+
+**Why a closed-state rule on `.dd-menu` kills the TRIGGER**: `visibility` and
+`pointer-events` both **inherit to descendants**. If Skilljar's `.dd-menu` is a wrapper that
+*contains* the trigger rather than a sibling of it, hiding `.dd-menu` hides and disables the
+trigger along with it. That fits every observation at once — three different hiding
+properties, three identical dead-button reports, and a handler identical to the one that
+worked. It also supersedes the `.47` note that the `display: none` mechanism was unproven:
+the mechanism is inheritance, and it applies to all three properties.
+
+The injected CSS is now **byte-identical to `.41`**, verified by comparing the two
+stylesheets with whitespace stripped.
+
+**The known cost, accepted deliberately**: a second tap may not close the menu, because
+Android's sticky `:hover` keeps the site's own hover rule matching. That is exactly `.41`
+behaviour. It is a far smaller problem than an unusable control, and it **must not** be
+fixed by hiding `.dd-menu` from a stylesheet. An inline style on the menu element is not a
+safe alternative either — inline declarations inherit the same way.
+
+Two things from `.48` are kept, because both make the app do strictly *less* to the dropdown
+than `.41` did and so cannot move it away from the working state: the menu-exists guard
+(return before `preventDefault` if there is no `.dd-menu` to open, so the trigger degrades to
+navigating rather than to nothing) and `fixHeaderOverlap` skipping any header child that
+contains a `.dd-menu` when it forces `position: static`.
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -765,17 +808,25 @@ been started yet.
   overflowed every time because the logo's size was an *input* to the layout. Give the image
   `flex: 1` + a relative `width` + `resizeMode="contain"` and let its height fall out of the
   space that is actually left. Applies to any full-bleed art in a height-constrained screen.
-- **`:hover` sticks on Android until you tap elsewhere.** Beat it with a MUTUALLY EXCLUSIVE
-  selector pair — `.x:not(.open) .menu` and `.x.open .menu` — not with a media query and not
-  with `display`. Because only one of the pair can match, they never compete; both are
-  `(0,3,0)` like the site's `.x:hover .menu`, and an appended stylesheet wins on source
-  order, so `visibility: hidden !important` on the closed rule holds whether or not `:hover`
-  is stuck. `@media (hover: none), (pointer: coarse)` is NOT dependable (`.43`, `.45`) — a
-  WebView reporting `hover: hover` makes it inert. And **do not use `display: none`** for the
-  closed state: `.46` did, and Skilljar's Get Started control went completely unresponsive
-  on device. The mechanism was never proven — a `display: none` subtree cannot intercept an
-  ancestor's events — but the correlation was exact, and `opacity`/`visibility`/
-  `pointer-events` achieve the same thing with no such risk.
+- **NEVER add a closed-state rule for the Get Started dropdown. Only force it OPEN.** This
+  cost four builds (`.46`-`.48`), each reported as a completely unresponsive control. The
+  working rule, confirmed on device in `.41` and restored in `.49`, is exactly one selector:
+  `.has-dd.touch-open .dd-menu` with `opacity`/`visibility`/`transform`/`pointer-events`
+  set to their visible values. The site's own CSS does all the hiding. Adding
+  `.has-dd:not(.touch-open) .dd-menu { display: none }` or `{ visibility: hidden;
+  pointer-events: none }` kills the TRIGGER, because all three properties **inherit to
+  descendants** and Skilljar's `.dd-menu` appears to wrap the trigger rather than sit beside
+  it. An inline style on the menu is not a safe workaround — it inherits identically.
+  The accepted cost is that a second tap may not close the menu: Android's `:hover` sticks
+  to the last-tapped element, so the site's own hover rule keeps matching. Live with it.
+  `@media (hover: none), (pointer: coarse)` does not rescue this either (`.43`, `.45`) — a
+  WebView reporting `hover: hover` makes the block inert.
+- **When a control regresses across builds, `git diff` the last version that worked before
+  reasoning about mechanisms.** `.46`-`.48` produced three plausible-sounding theories
+  (display/hit-testing, sticky hover, a neutered `preventDefault`) and three failed fixes.
+  One `git show <commit>:<file>` against the last good build found the answer in minutes: the
+  handler was byte-identical and the CSS had grown a rule that never existed in the working
+  version. Ask "what changed" before asking "what could cause this".
 - **Skilljar navigates via `history.pushState`, so in-page state survives a "page change".**
   Anything toggled by a class on a long-lived element (an open dropdown) must be cleared by
   wrapping `pushState`/`replaceState` and listening for `popstate`/`pagehide`. A full page

@@ -23,10 +23,10 @@ export const COMMUNITY_DIAGNOSTICS = false;
 // [BC NAV] log in components/LMSWebView.tsx, and the onMessage bridge that carried
 // them. Nothing reads this flag any more, so it is retained only as the documented
 // switch to re-instrument from — flipping it true does nothing on its own.
-// 2.116621.48 — TRUE for the dropdown probe only (one postMessage from the Get
-// Started touch handler, one console.log via onMessage). MUST be set false before
-// the release build; that single line compiles the probe out completely.
-export const ACADEMY_DIAGNOSTICS = true;
+// Academy diagnostics, false for release. The .48 dropdown probe was removed in
+// .49 — the git history answered what it was for — so nothing reads this flag;
+// re-instrumenting means re-adding call sites.
+export const ACADEMY_DIAGNOSTICS = false;
 // Community uses Azure AD B2C — separate from Academy's Skilljar SSO
 export const COMMUNITY_AUTH_URL = 'https://community.board.com/entry/signin?target=https%3A%2F%2Fcommunity.board.com%2F';
 // Community employee login uses Azure AD SAML (Boardway/corporate SSO)
