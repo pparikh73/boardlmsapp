@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.46`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.47`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -510,6 +510,70 @@ its own — re-instrumenting means re-adding call sites.
 dropdown close rule, and the SPA-navigation clear. The search-freeze fix from `.45` is also
 unconfirmed on device.
 
+Version `2.116621.47` fixes three things found testing `.46` on device.
+
+**1. Get Started went completely unresponsive — `display: none` reverted.** `.46`'s closed
+rule was `.has-dd:not(.touch-open) .dd-menu { display: none !important; }` and the control
+died. That declaration is gone; the menu is hidden with `opacity` + `visibility` +
+`pointer-events` only.
+
+Be careful with the reason recorded here, because a wrong one will cost a future build.
+The reported mechanism — "`display: none` on a child blocks hit-testing on the parent" — is
+**not** how Blink works: a `display: none` subtree is removed from the box tree entirely and
+cannot intercept or absorb events for an ancestor. **The true mechanism is unproven.** What
+is certain is that the CSS was the *only* thing `.46` changed for this control, the handler
+is unchanged and correct, and the symptom appeared with it. A plausible unverified
+explanation is that Skilljar's own script measures the menu on init (a positioning library
+reading `offsetHeight`, say) and bails when every measurement is zero, taking the trigger's
+interactivity with it. Do not treat that as established.
+
+**The revert does not reintroduce the sticky-`:hover` bug**, and the reason is the selector
+pair rather than the property. `:not(.touch-open)` and `.touch-open` are **mutually
+exclusive** — exactly one matches at any moment, so they never compete. Both are `(0,3,0)`,
+the same specificity as the site's `.has-dd:hover .dd-menu`, and this stylesheet is appended
+to `<head>` after the site's, so source order decides and ours wins regardless of hover
+state. `visibility: hidden !important` on the closed rule therefore beats the hover rule
+whether or not `:hover` is stuck. The `@media (hover: none), (pointer: coarse)` block from
+`.43`/`.45` stays deleted — it was the weak link, since a WebView reporting `hover: hover`
+made the whole neutraliser inert.
+
+The touch handler was re-verified line by line and is correct: `touchend` only, explicit
+`contains` → `add`/`remove`, outside tap closes all, taps inside `.dd-menu` return before
+both the `preventDefault` and the toggle.
+
+**2. Search freeze — two rAF loops were never gated.** `.45` added `bcIsEditing()` to
+`bcSchedule`, which covers the header tasks, and that guard is confirmed still in place. But
+there are **three** rAF loops, not one, and the other two were left ungated:
+
+- `bcScheduleMarkInline` (in `injectedJavaScriptBeforeContentLoaded`, so it runs in **every
+  frame**) — a full-document `querySelectorAll('video')` per frame.
+- `bcScheduleVideoFix` — the expensive one. `fixVideosEverywhere()` does a full-document
+  `querySelectorAll('iframe')` and probes `f.contentDocument` on each; a cross-origin probe
+  **throws a SecurityError that is then caught**, and throwing per iframe per frame is
+  costly.
+
+Both ran once per animation frame for as long as the DOM kept mutating — which during search
+autocomplete is every keystroke. Both now stand down while a text field has focus. Nothing
+is missed: typing into a search box inserts no videos or iframes, and anything that does
+appear is caught on the next mutation after blur. `bcScheduleMarkInline` carries its own copy
+of the check because it lives in a separate script with a separate scope.
+
+**3. White page on Get Started → Search.** The history hooks from `.46` are confirmed present
+(`pushState`, `replaceState`, `popstate`, `pagehide`). The white page is the
+`loadingOverlay` — opaque white, `absoluteFill` — covering the old page between `onLoadStart`
+and `onLoadEnd`.
+
+**It was never an SPA problem.** Android fires `onPageStarted` for real navigations only, so
+a `history.pushState` route change never raised `onLoadStart` and never showed the overlay;
+"suppress it for SPA navigations" would have changed nothing. Tapping Search is a real
+document load, which is why it flashed white. The overlay is now shown for the **first load
+only** (`hasLoadedOnceRef`), so later navigations leave the previous page on screen until
+the new one paints — what a browser does. The first load keeps it, since there is no
+previous page and the alternative is a blank WebView.
+
+Also note a real document load re-injects the scripts from scratch, so `touch-open` cannot
+survive one; the `.46` history hooks only matter for genuine `pushState` routes.
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -636,14 +700,17 @@ been started yet.
   overflowed every time because the logo's size was an *input* to the layout. Give the image
   `flex: 1` + a relative `width` + `resizeMode="contain"` and let its height fall out of the
   space that is actually left. Applies to any full-bleed art in a height-constrained screen.
-- **`:hover` sticks on Android until you tap elsewhere**, and you cannot reliably win that
-  fight by competing with the site's hover rule. `@media (hover: none), (pointer: coarse)`
-  is not dependable — a stylus, a connected mouse or a WebView that misreports leaves the
-  neutraliser inert and the menu stuck open, which reads as "removing the class does
-  nothing" while tapping elsewhere appears to work. Make the closed state
-  `display: none !important` on `:not(.your-class)`, unconditionally: no media query to
-  misreport, and no `opacity`/`visibility`/`transform` declaration can override `display`.
-  Do not set `display` in the open rule, or a flex/grid menu loses its internal layout.
+- **`:hover` sticks on Android until you tap elsewhere.** Beat it with a MUTUALLY EXCLUSIVE
+  selector pair — `.x:not(.open) .menu` and `.x.open .menu` — not with a media query and not
+  with `display`. Because only one of the pair can match, they never compete; both are
+  `(0,3,0)` like the site's `.x:hover .menu`, and an appended stylesheet wins on source
+  order, so `visibility: hidden !important` on the closed rule holds whether or not `:hover`
+  is stuck. `@media (hover: none), (pointer: coarse)` is NOT dependable (`.43`, `.45`) — a
+  WebView reporting `hover: hover` makes it inert. And **do not use `display: none`** for the
+  closed state: `.46` did, and Skilljar's Get Started control went completely unresponsive
+  on device. The mechanism was never proven — a `display: none` subtree cannot intercept an
+  ancestor's events — but the correlation was exact, and `opacity`/`visibility`/
+  `pointer-events` achieve the same thing with no such risk.
 - **Skilljar navigates via `history.pushState`, so in-page state survives a "page change".**
   Anything toggled by a class on a long-lived element (an open dropdown) must be cleared by
   wrapping `pushState`/`replaceState` and listening for `popstate`/`pagehide`. A full page
@@ -661,14 +728,21 @@ been started yet.
   Android search freeze. Read everything into locals first, then write. And guard the whole
   pass on something cheap that actually changed (the element and its width), so a
   re-entrant call costs one rect read instead of a full pass.
-- **Anything on the mutation path must stand down while a text field has focus.** Typing is
-  the worst case for all three triggers at once — autocomplete mutates the DOM, the Android
-  soft keyboard fires `resize`, and scroll-into-view fires `scroll`. `bcIsEditing()` gates
-  the frame guard, with a `focusout` catch-up so nothing is permanently skipped.
-- **A backtick inside injected JS silently terminates the template literal.** A comment
-  reading ``// `document` rather than ...`` ended the string mid-script. Always syntax-check
-  the extracted injected code (`node --check`) after editing it — a truncated extraction is
-  itself the signal.
+- **Anything on the mutation path must stand down while a text field has focus — and there
+  are THREE rAF loops, not one.** Typing is the worst case for all triggers at once:
+  autocomplete mutates the DOM, the Android soft keyboard fires `resize`, and
+  scroll-into-view fires `scroll`. `.45` gated only `bcSchedule` and left
+  `bcScheduleVideoFix` and `bcScheduleMarkInline` running a full-document query every frame.
+  Grep for every `requestAnimationFrame(` in the file, exactly as you would for
+  `new MutationObserver(`. `bcScheduleMarkInline` needs its own copy of the check: it is in
+  the other script and cannot see `bcIsEditing`.
+- **A backtick inside injected JS silently terminates the template literal.** This has now
+  bitten twice (`.45`, `.47`) and both times it was a COMMENT quoting a selector or property
+  in Markdown-style backticks — the most natural thing to type, and it truncates the script
+  at that character with no build error. Never use a backtick inside either injected
+  literal, in code or prose. Always extract both scripts and `node --check` them after
+  editing: a short extraction length is itself the signal (`.47` came back at 1713 chars
+  against an expected ~37000).
 - **Every injected-JS fix should be wrapped in its own `try/catch`.** Sites change their
   DOM shape without notice; one throwing selector shouldn't silently abort every other
   fix in the same injection block.

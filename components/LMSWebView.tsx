@@ -20,6 +20,20 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
     const webViewRef = useRef<WebView>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    // 2.116621.47 — the full-screen white overlay is shown for the FIRST load only.
+    //
+    // The reported white page is this overlay (styles.loadingOverlay is opaque white
+    // and absoluteFill) covering the old page between onLoadStart and onLoadEnd.
+    // Note it was never an SPA problem: Android fires onPageStarted for real
+    // navigations only, so a history.pushState route change does not raise
+    // onLoadStart and never showed the overlay in the first place — "suppress it for
+    // SPA navigations" would have changed nothing. Tapping Search is a real document
+    // load, which is why it flashed white.
+    //
+    // Subsequent loads now leave the previous page on screen until the new one
+    // paints, which is what a browser does. The first load still needs the overlay:
+    // there is no previous page, and the alternative is a blank WebView.
+    const hasLoadedOnceRef = useRef(false);
 
     useImperativeHandle(ref, () => ({
       goHome: () => {
@@ -141,8 +155,11 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           ref={webViewRef}
           source={{ uri: url }}
           style={styles.webview}
-          onLoadStart={() => setLoading(true)}
+          onLoadStart={() => {
+            if (!hasLoadedOnceRef.current) setLoading(true);
+          }}
           onLoadEnd={() => {
+            hasLoadedOnceRef.current = true;
             setLoading(false);
             setRefreshing(false);
           }}
@@ -226,12 +243,33 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 // Coalescing loses the mutation records, so scan the document once per
                 // frame instead of per added node. That is strictly cheaper: one
                 // querySelectorAll per frame replaces one per inserted node.
+                //
+                // 2.116621.47 — also STAND DOWN WHILE A TEXT FIELD HAS FOCUS. .45 added
+                // that guard to bcSchedule (the header tasks) but not here, so this loop
+                // still ran a full-document querySelectorAll every frame for as long as
+                // search autocomplete kept mutating the DOM — once per keystroke, in
+                // every frame of the page. An autocomplete dropdown never inserts a
+                // <video>, so there is nothing to miss; anything that does appear is
+                // caught on the next mutation after blur.
+                //
+                // Its own copy of the check rather than the one in injectedJavaScript:
+                // this is a separate script with a separate scope and cannot see it.
+                function bcEditingBefore() {
+                  try {
+                    var a = document.activeElement;
+                    if (!a) return false;
+                    var tag = a.tagName;
+                    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
+                           a.isContentEditable === true;
+                  } catch (e) { return false; }
+                }
                 var bcVidRaf = false;
                 function bcScheduleMarkInline() {
                   if (bcVidRaf) return;
                   bcVidRaf = true;
                   var run = function () {
                     bcVidRaf = false;
+                    if (bcEditingBefore()) return;
                     try { document.querySelectorAll('video').forEach(markInline); } catch (e) {}
                   };
                   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
@@ -289,30 +327,29 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 // is unreachable on mobile. A class the handler below toggles drives
                 // it instead.
                 //
-                // 2.116621.46 — the menu's visibility now depends on the class ALONE.
+                // 2.116621.47 — display is NOT used. .46 set display: none on the
+                // closed rule and the Get Started control went completely unresponsive
+                // on device, so that declaration is reverted. The menu is hidden with opacity + visibility
+                // + pointer-events only.
                 //
-                // .40 through .45 all tried to WIN a fight against the site's own
-                // hover rule: first by mirroring it, then (.43/.45) by neutralising
-                // .has-dd:hover inside @media (hover: none), (pointer: coarse). That
-                // media query is the weak link — if the WebView reports hover: hover
-                // (a stylus, a connected mouse, or simply a WebView that misreports),
-                // the neutraliser never matches and the sticky :hover keeps the menu
-                // open, which is exactly the "does not close on second tap" report.
-                //
-                // Not competing any more. The closed state is display: none, which no
-                // opacity/visibility/transform declaration in the site's hover rule can
-                // override at any specificity, and it applies unconditionally — no
-                // media query to misreport. The menu is visible if and only if
-                // .touch-open is present, so removing the class always closes it.
-                //
-                // display is deliberately NOT set in the open rule: with
-                // :not(.touch-open) no longer matching, the site's own display value
-                // applies, so a .dd-menu that is a flex or grid container keeps its
-                // internal layout intact.
+                // This is still deterministic against Android's sticky :hover, which is
+                // what .40-.45 kept losing to. The reason is the selector pair, not the
+                // property: :not(.touch-open) and .touch-open are MUTUALLY EXCLUSIVE,
+                // so exactly one of them matches at any moment and they never compete
+                // with each other. Both are (0,3,0), the same specificity as the site's
+                // own .has-dd:hover .dd-menu, and this stylesheet is appended to <head>
+                // after the site's — so source order decides and ours wins either way.
+                // visibility: hidden !important on the closed rule therefore beats the
+                // hover rule whether or not :hover is stuck, which is exactly what .43
+                // and .45 needed the @media (hover: none) block for. That media query is
+                // gone: it was the weak link, since a WebView reporting hover: hover
+                // silently made the whole neutraliser inert.
                 var ddStyle = document.createElement('style');
                 ddStyle.textContent =
                   '.has-dd:not(.touch-open) .dd-menu {' +
-                  '  display: none !important;' +
+                  '  opacity: 0 !important;' +
+                  '  visibility: hidden !important;' +
+                  '  pointer-events: none !important;' +
                   '}' +
                   '.has-dd.touch-open .dd-menu {' +
                   '  opacity: 1 !important;' +
@@ -541,12 +578,30 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 // Search autocomplete mutates attributes on every keystroke, so this
                 // is a third contributor to the Android freeze independent of the
                 // blocking navigation callback.
+                //
+                // 2.116621.47 — this is the EXPENSIVE one, and .45 left it ungated.
+                // fixVideosEverywhere() does a full-document querySelectorAll('iframe')
+                // and probes f.contentDocument on each — a cross-origin probe THROWS a
+                // SecurityError that is then caught, and throwing per iframe per frame
+                // is costly. It ran every frame for as long as the DOM kept mutating,
+                // which during search autocomplete means every keystroke. Same reasoning
+                // as above: typing into a search box inserts no videos or iframes.
                 var bcVidRafPending = false;
+                function bcVideoFixEditing() {
+                  try {
+                    var a = document.activeElement;
+                    if (!a) return false;
+                    var tag = a.tagName;
+                    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
+                           a.isContentEditable === true;
+                  } catch (e) { return false; }
+                }
                 function bcScheduleVideoFix() {
                   if (bcVidRafPending) return;
                   bcVidRafPending = true;
                   var run = function () {
                     bcVidRafPending = false;
+                    if (bcVideoFixEditing()) return;
                     try { fixVideosEverywhere(); } catch (e) {}
                   };
                   // Its own guard rather than bcSchedule: that one lives in a later
