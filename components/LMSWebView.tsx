@@ -222,18 +222,29 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 document.addEventListener('DOMContentLoaded', function() {
                   try { document.querySelectorAll('video').forEach(markInline); } catch (e) {}
                 });
-                new MutationObserver(function(muts) {
-                  muts.forEach(function(m) {
-                    if (!m.addedNodes) return;
-                    m.addedNodes.forEach(function(n) {
-                      if (!n) return;
-                      if (n.tagName === 'VIDEO') markInline(n);
-                      if (n.querySelectorAll) {
-                        try { n.querySelectorAll('video').forEach(markInline); } catch (e) {}
-                      }
-                    });
-                  });
-                }).observe(document, { childList: true, subtree: true });
+                // COALESCED in 2.116621.45. This ran ONCE PER MUTATION RECORD and
+                // called querySelectorAll('video') on every added node. Both .38 and
+                // .43 grepped only injectedJavaScript, so this observer — the only one
+                // in the BEFORE-content script, and the only one that observes
+                // the document itself rather than document.body — was never audited.
+                // Skilljar's search autocomplete inserts and removes result nodes on
+                // every keystroke, so this fired continuously while typing.
+                //
+                // Coalescing loses the mutation records, so scan the document once per
+                // frame instead of per added node. That is strictly cheaper: one
+                // querySelectorAll per frame replaces one per inserted node.
+                var bcVidRaf = false;
+                function bcScheduleMarkInline() {
+                  if (bcVidRaf) return;
+                  bcVidRaf = true;
+                  var run = function () {
+                    bcVidRaf = false;
+                    try { document.querySelectorAll('video').forEach(markInline); } catch (e) {}
+                  };
+                  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+                  else setTimeout(run, 16);
+                }
+                new MutationObserver(bcScheduleMarkInline).observe(document, { childList: true, subtree: true });
               } catch (e) {}
               try {
                 if (window.HTMLVideoElement && window.HTMLVideoElement.prototype.webkitEnterFullscreen) {
@@ -563,7 +574,10 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 // poll briefly to catch a video inserted shortly after.
                 var bcVideoFixPollCount = 0;
                 var bcVideoFixPollTimer = setInterval(function() {
-                  fixVideosEverywhere();
+                  // Through the frame guard, not a direct call: this poller ran an
+                  // uncoalesced full-document pass every 300ms for the first ~6s,
+                  // which is precisely when a user first reaches the search field.
+                  bcScheduleVideoFix();
                   bcVideoFixPollCount++;
                   if (bcVideoFixPollCount > 20) clearInterval(bcVideoFixPollTimer);
                 }, 300);
@@ -587,11 +601,38 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 // every registered task, so a burst costs at most one pass per frame.
                 var bcTasks = [];
                 var bcRafPending = false;
+                var bcDeferred = false;
+
+                // 2.116621.45. While a text field has focus, DO NOT run the header
+                // passes at all.
+                //
+                // This is the cut that severs the search freeze. Typing is the single
+                // worst case for these tasks: Skilljar's autocomplete mutates the DOM
+                // on every keystroke (firing the observers), the Android soft keyboard
+                // resizes the viewport (firing the resize listener), and scrolling the
+                // focused input into view fires the scroll listener — so all three
+                // inputs to bcSchedule peak simultaneously, once per keystroke.
+                //
+                // Nothing is lost by skipping: the header's geometry cannot
+                // meaningfully change while the user is typing into a field, which is
+                // the only thing these tasks respond to. Any change that did happen is
+                // picked up on blur via the focusout listener below.
+                function bcIsEditing() {
+                  try {
+                    var a = document.activeElement;
+                    if (!a) return false;
+                    var tag = a.tagName;
+                    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
+                           a.isContentEditable === true;
+                  } catch (e) { return false; }
+                }
+
                 function bcSchedule() {
                   if (bcRafPending) return;
                   bcRafPending = true;
                   var run = function () {
                     bcRafPending = false;
+                    if (bcIsEditing()) { bcDeferred = true; return; }
                     for (var t = 0; t < bcTasks.length; t++) {
                       try { bcTasks[t](); } catch (e) {}
                     }
@@ -599,6 +640,12 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
                   else setTimeout(run, 16);
                 }
+
+                // Catch up once the field is released, so a layout change that did
+                // occur during typing is not left unapplied.
+                document.addEventListener('focusout', function () {
+                  if (bcDeferred) { bcDeferred = false; bcSchedule(); }
+                }, true);
 
                 var bcKnownHeader = null;
                 var bcNoHeaderUntil = 0;
@@ -648,7 +695,7 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 new MutationObserver(bcSchedule).observe(document.body, { childList: true, subtree: true });
                 var bcPollCount = 0;
                 var bcPollTimer = setInterval(function() {
-                  padForFixedHeader();
+                  bcSchedule();
                   bcPollCount++;
                   if (bcPollCount > 20) clearInterval(bcPollTimer);
                 }, 300);
@@ -666,6 +713,37 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                 // Own try/catch so a DOM shape change here cannot abort the padding
                 // fix above, which is the more important of the two.
                 try {
+                  // 2.116621.45 — rewritten. This function was the Android search
+                  // freeze. Three defects, all visible in the previous version:
+                  //
+                  // (a) LAYOUT THRASH. It interleaved style WRITES with geometry READS:
+                  //     getComputedStyle(header), then three style.setProperty calls,
+                  //     then getComputedStyle(kids[i]) in a loop, then img style writes,
+                  //     then getBoundingClientRect() in a loop. Every read after a write
+                  //     forces the engine to run layout synchronously before it can
+                  //     answer — so one pass forced layout several times over.
+                  // (b) UNCONDITIONAL WRITES. It re-applied identical values on every
+                  //     invocation, re-dirtying layout each time even when nothing had
+                  //     changed. Combined with the mutation observer this ran once per
+                  //     animation frame for as long as the DOM kept mutating.
+                  // (c) UNCACHED FALLBACK. findFixedHeader() caches hits and misses, but
+                  //     the fallback below — which is the path actually taken if
+                  //     Skilljar's navbar is statically positioned — re-ran
+                  //     querySelectorAll plus a getBoundingClientRect per candidate on
+                  //     every single pass.
+                  //
+                  // Search autocomplete mutates the DOM on every keystroke, so all of
+                  // this ran per keystroke on the WebView's main thread. Chrome on the
+                  // same device runs none of it, which is exactly the reported
+                  // difference.
+                  //
+                  // Now: the fallback is cached, the whole pass is skipped unless the
+                  // header element or its width actually changed, and reads are done
+                  // BEFORE writes so no read can force a layout mid-pass.
+                  var bcFallbackHeader = null;
+                  var bcStyledHeader = null;
+                  var bcStyledWidth = -1;
+
                   function fixHeaderOverlap() {
                     var header = findFixedHeader();
                     if (!header) {
@@ -676,23 +754,64 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                       // different sizing attempts. Look for a semantic header near the
                       // top that actually contains an image. Scoped to three tag names
                       // rather than '*', so it stays cheap enough for the mutation path.
-                      var bcCand = document.querySelectorAll('header, [role="banner"], nav');
-                      for (var q = 0; q < bcCand.length; q++) {
-                        var qr = bcCand[q].getBoundingClientRect();
-                        if (qr.top <= 120 && qr.height > 0 && qr.height < 200 &&
-                            bcCand[q].getElementsByTagName('img').length > 0) {
-                          header = bcCand[q];
-                          break;
+                      //
+                      // CACHED as of .45 — re-querying the document and measuring every
+                      // candidate on each pass was defect (c) above.
+                      if (bcFallbackHeader && document.body.contains(bcFallbackHeader)) {
+                        header = bcFallbackHeader;
+                      } else {
+                        var bcCand = document.querySelectorAll('header, [role="banner"], nav');
+                        for (var q = 0; q < bcCand.length; q++) {
+                          var qr = bcCand[q].getBoundingClientRect();
+                          if (qr.top <= 120 && qr.height > 0 && qr.height < 200 &&
+                              bcCand[q].getElementsByTagName('img').length > 0) {
+                            header = bcCand[q];
+                            bcFallbackHeader = header;
+                            break;
+                          }
                         }
                       }
                     }
                     if (!header) return;
 
+                    // The only geometry read on the hot path. If neither the header
+                    // element nor its width has changed, every value below would be
+                    // written identical to what is already there — so there is nothing
+                    // to do, and the pass costs one rect read instead of a full thrash.
+                    var headerWidth = Math.round(header.getBoundingClientRect().width);
+                    if (header === bcStyledHeader && headerWidth === bcStyledWidth) return;
+
+                    // ---- PHASE 1: READ EVERYTHING FIRST -------------------------
+                    // No style is written until every measurement is taken, so none of
+                    // these reads can force a synchronous layout.
+                    var kids = header.children;
+                    var needFlex = window.getComputedStyle(header).display.indexOf('flex') === -1;
+                    var kidAbsolute = [];
+                    for (var i = 0; i < kids.length; i++) {
+                      kidAbsolute[i] = window.getComputedStyle(kids[i]).position === 'absolute';
+                    }
+                    var bcImgs = header.getElementsByTagName('img');
+                    // The logo is the widest image; used below to decide which direct
+                    // child of the header is the logo's host rather than the controls.
+                    // Measured here, before any write. min-height is applied uniformly
+                    // to every image afterwards, so it cannot change which one is
+                    // widest — the ordering read now is still correct after the writes.
+                    var logo = null, bcWidest = 0;
+                    for (var c2 = 0; c2 < bcImgs.length; c2++) {
+                      var cw = bcImgs[c2].getBoundingClientRect().width;
+                      if (cw > bcWidest) { bcWidest = cw; logo = bcImgs[c2]; }
+                    }
+                    // Find which direct child of the header contains the logo; every
+                    // other direct child is the right-hand controls.
+                    var logoHost = logo;
+                    while (logoHost && logoHost.parentElement !== header) {
+                      logoHost = logoHost.parentElement;
+                    }
+
+                    // ---- PHASE 2: WRITE EVERYTHING ------------------------------
                     // The row has to be a nowrap flex line for shrink factors to mean
                     // anything at all.
-                    if (window.getComputedStyle(header).display.indexOf('flex') === -1) {
-                      header.style.setProperty('display', 'flex', 'important');
-                    }
+                    if (needFlex) header.style.setProperty('display', 'flex', 'important');
                     header.style.setProperty('align-items', 'center', 'important');
                     header.style.setProperty('flex-wrap', 'nowrap', 'important');
 
@@ -700,11 +819,8 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                     // can keep it clear of the logo — that is the overlap. Restricted
                     // to DIRECT children: a dropdown panel deeper in the tree is
                     // legitimately absolute and must stay that way to open correctly.
-                    var kids = header.children;
-                    for (var i = 0; i < kids.length; i++) {
-                      if (window.getComputedStyle(kids[i]).position === 'absolute') {
-                        kids[i].style.setProperty('position', 'static', 'important');
-                      }
+                    for (var j = 0; j < kids.length; j++) {
+                      if (kidAbsolute[j]) kids[j].style.setProperty('position', 'static', 'important');
                     }
 
                     // Logo: height-driven so it scales instead of being clipped, and
@@ -720,30 +836,15 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                     // assignment: a plain inline declaration still loses to the site's
                     // own !important rules, which is a likely reason the logo was
                     // constrained in the first place.
-                    var bcImgs = header.getElementsByTagName('img');
                     for (var n = 0; n < bcImgs.length; n++) {
                       bcImgs[n].style.setProperty('min-height', '40px', 'important');
                       bcImgs[n].style.setProperty('width', 'auto', 'important');
                       bcImgs[n].style.setProperty('object-fit', 'contain', 'important');
                     }
-                    // The logo is the widest image; used below to decide which direct
-                    // child of the header is the logo's host rather than the controls.
-                    var logo = null, bcWidest = 0;
-                    for (var c2 = 0; c2 < bcImgs.length; c2++) {
-                      var cw = bcImgs[c2].getBoundingClientRect().width;
-                      if (cw > bcWidest) { bcWidest = cw; logo = bcImgs[c2]; }
-                    }
                     if (logo) {
                       logo.style.setProperty('max-height', '48px', 'important');
                       logo.style.setProperty('max-width', '55%', 'important');
                       logo.style.setProperty('flex-shrink', '1', 'important');
-                    }
-
-                    // Find which direct child of the header contains the logo; every
-                    // other direct child is the right-hand controls.
-                    var logoHost = logo;
-                    while (logoHost && logoHost.parentElement !== header) {
-                      logoHost = logoHost.parentElement;
                     }
                     for (var k = 0; k < kids.length; k++) {
                       if (kids[k] === logoHost) {
@@ -757,6 +858,9 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                         kids[k].style.setProperty('flex-shrink', '0', 'important');
                       }
                     }
+
+                    bcStyledHeader = header;
+                    bcStyledWidth = headerWidth;
                   }
 
                   bcTasks.push(fixHeaderOverlap);
@@ -764,10 +868,15 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                   // Re-apply: the site re-renders its header after hydration, and a
                   // rotation changes which widths collide.
                   window.addEventListener('resize', bcSchedule, { passive: true });
-                  new MutationObserver(bcSchedule).observe(document.body, { childList: true, subtree: true });
+                  // NO second MutationObserver here. An identical registration
+                  // (document.body, childList+subtree, bcSchedule) already exists
+                  // beside padForFixedHeader above, and fixHeaderOverlap is in the same
+                  // bcTasks list it drives — so this was a duplicate that made the
+                  // engine dispatch two observer callbacks per mutation batch to do one
+                  // pass of work. Removed in 2.116621.45.
                   var bcHdrCount = 0;
                   var bcHdrTimer = setInterval(function() {
-                    fixHeaderOverlap();
+                    bcSchedule();
                     bcHdrCount++;
                     if (bcHdrCount > 20) clearInterval(bcHdrTimer);
                   }, 300);

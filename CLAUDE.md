@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.44`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.45`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -381,6 +381,76 @@ Instrumentation from `.43` is **kept** (`ACADEMY_DIAGNOSTICS` still `true`, so t
 also not for public release). The one number that settles the rebuild: `[BC LAYOUT] cards`
 `y + h` must stay inside `[BC LAYOUT] container h`.
 
+Version `2.116621.45` fixes the Android search freeze. The decisive new fact from the
+tester: **search works in Chrome on the same device** (iQOO Z9s, Android 15). Chrome and
+Android WebView are both V8 + Blink, so anything Skilljar's own code does, it does in both.
+The difference is our injected JavaScript — Chrome does not run it.
+
+**Fix 2 from `.39` is confirmed correctly applied** and is not the problem:
+`onShouldStartLoadWithRequest` returns `true` for Android before any domain work, and
+`onNavigationStateChange` carries the enforcement. Neither is hot during typing —
+autocomplete uses XHR, which does not reach `shouldOverrideUrlLoading` at all.
+
+**Root cause: `fixHeaderOverlap` is a forced-synchronous-layout thrash that ran once per
+animation frame for as long as the DOM kept mutating.** Three defects compounded:
+
+1. **Layout thrash.** It interleaved style *writes* with geometry *reads*:
+   `getComputedStyle(header)` → three `setProperty` calls → `getComputedStyle(kids[i])` in a
+   loop → image `setProperty` calls → `getBoundingClientRect()` in a loop → more writes.
+   Every read after a write forces the engine to run layout synchronously before it can
+   answer, so a single pass forced layout several times over.
+2. **Unconditional writes.** It re-applied identical values on every invocation, re-dirtying
+   layout each time even when nothing had changed.
+3. **Uncached fallback.** `findFixedHeader()` caches hits *and* misses, but the `.39`
+   fallback (`querySelectorAll('header, [role="banner"], nav')` plus a
+   `getBoundingClientRect` per candidate) is the path actually taken when Skilljar's navbar
+   is statically positioned — and it was never cached, so it re-queried the document every
+   pass.
+
+All three inputs to `bcSchedule` peak simultaneously on every keystroke: autocomplete
+mutates the DOM (observers), the Android soft keyboard resizes the viewport (`resize`), and
+the focused input scrolls into view (`scroll`).
+
+The fixes, each one traceable to something provably wrong in the file rather than guessed:
+
+- **The header passes are skipped entirely while a text field has focus** (`bcIsEditing()`
+  in the frame guard, with a `focusout` catch-up). This is the cut that severs the
+  keystroke→thrash chain. Nothing is lost: header geometry cannot meaningfully change while
+  the user is typing into a field, which is all these tasks respond to.
+- **`fixHeaderOverlap` rewritten** — the fallback header is cached, the whole pass returns
+  early unless the header element or its width actually changed (one rect read instead of a
+  full thrash), and all reads happen in a phase *before* all writes.
+- **The `MutationObserver` in `injectedJavaScriptBeforeContentLoaded` is now coalesced.** It
+  was uncoalesced, observed `document` (not `document.body`) with `childList`+`subtree`, and
+  called `querySelectorAll('video')` per added node. **Both `.38` and `.43` grepped only
+  `injectedJavaScript`, so the only observer in the other script was never audited** — and
+  that script runs in every frame.
+- **A duplicate `MutationObserver` was removed.** An identical registration
+  (`document.body`, `childList`+`subtree`, `bcSchedule`) existed twice, making the engine
+  dispatch two callbacks per mutation batch for one pass of work.
+- **All three `setInterval` pollers now go through the frame guards.** They called
+  `fixVideosEverywhere` / `padForFixedHeader` / `fixHeaderOverlap` *directly*, bypassing the
+  coalescing for the first ~6.3 s after load — exactly the window in which a user reaches
+  the search field.
+
+**Ruled out, with reasons, so they are not re-investigated:** no `keydown`/`keypress`/
+`input`/`focus` listener exists anywhere in the injected JS, and the two capture-phase
+handlers (`touchend`/`click`) call `.closest()` and return early for any target outside
+`.has-dd` — **they never touch the search field's events**. `javaScriptEnabled`,
+`domStorageEnabled` and `cacheEnabled` are unset and default to `true`, matching Chrome.
+`mixedContentMode` is unset (`'never'`) and `androidLayerType` is unset (`'none'`) — neither
+would freeze, and blocked mixed content would fail silently. `setSupportMultipleWindows={false}`
+routes `target="_blank"` through the blocking callback, but not per keystroke.
+
+**One confound worth knowing for the Chrome comparison**: `WEBVIEW_USER_AGENT` spoofs
+`Chrome/125.0.0.0` on a Pixel 8, so Skilljar is not told it is a WebView. That makes the two
+environments *more* alike, not less — it argues against "Skilljar serves us different code"
+— but the UA strings are not identical, so the comparison is close rather than exact.
+
+`ACADEMY_DIAGNOSTICS` is still `true`, so this build is **not for public release**. Note the
+`[BC NAV]` log sits *inside* the Android blocking callback, before its lock is released — so
+turn the flag off before judging the freeze fix on timing.
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -511,10 +581,26 @@ been started yet.
   hover rule neutralised under `@media (hover: none), (pointer: coarse)` before a
   touch-driven class can control it — otherwise removing the class looks like it does
   nothing, while tapping elsewhere appears to work.
-- **Every `MutationObserver` callback must be behind a frame guard — check them ALL.**
-  `.38` coalesced two and missed `plObserver`, which was the more expensive one and fired
-  on attribute changes too. When adding a guard, grep for every `new MutationObserver(` in
-  the file rather than fixing the ones a bug report happens to point at.
+- **Every `MutationObserver` callback must be behind a frame guard — check them ALL, in
+  BOTH injected scripts.** `.38` coalesced two and missed `plObserver`; `.43` then caught
+  that one but still grepped only `injectedJavaScript`, missing the observer in
+  `injectedJavaScriptBeforeContentLoaded` — which observes `document` rather than
+  `document.body` and runs in *every frame*. Grep the whole file for
+  `new MutationObserver(`, not one prop.
+- **Never interleave style writes with geometry reads.** `getComputedStyle` and
+  `getBoundingClientRect` after a `setProperty` force the engine to run layout
+  synchronously before answering. `fixHeaderOverlap` did this in two loops and was the
+  Android search freeze. Read everything into locals first, then write. And guard the whole
+  pass on something cheap that actually changed (the element and its width), so a
+  re-entrant call costs one rect read instead of a full pass.
+- **Anything on the mutation path must stand down while a text field has focus.** Typing is
+  the worst case for all three triggers at once — autocomplete mutates the DOM, the Android
+  soft keyboard fires `resize`, and scroll-into-view fires `scroll`. `bcIsEditing()` gates
+  the frame guard, with a `focusout` catch-up so nothing is permanently skipped.
+- **A backtick inside injected JS silently terminates the template literal.** A comment
+  reading ``// `document` rather than ...`` ended the string mid-script. Always syntax-check
+  the extracted injected code (`node --check`) after editing it — a truncated extraction is
+  itself the signal.
 - **Every injected-JS fix should be wrapped in its own `try/catch`.** Sites change their
   DOM shape without notice; one throwing selector shouldn't silently abort every other
   fix in the same injection block.
