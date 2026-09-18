@@ -229,31 +229,15 @@ const ACADEMY_INJECT_MAIN = `
                   }
 
                   // A tap INSIDE the revealed menu is a real link. Return before both
-                  // the preventDefault and the toggle, so menu links stay clickable.
+                  // the preventDefault and the toggle, so menu links stay clickable and
+                  // the menu does not close under the finger mid-tap.
                   //
-                  // 2.116621.54 — but clear touch-open on the way out. A tap on a menu
-                  // link used to return here with the class still set. When the target
-                  // opens an IN-PAGE overlay rather than navigating — Skilljar's Search
-                  // does — there is no document load, so nothing ever removed the class:
-                  // not the history hooks, not pagehide, not the .50 navigation clear,
-                  // none of which fire without a navigation. The menu therefore stayed
-                  // rendered over the overlay until the user navigated away for real,
-                  // which is exactly the reported permanent overlay.
-                  //
-                  // KNOWN RISK, recorded so device testing knows what to look for:
-                  // removing the class here hides the menu on touchend, and the click
-                  // that activates the link is dispatched AFTER that. If Blink
-                  // re-hit-tests at click time it may find nothing, and menu links —
-                  // including Search itself — could stop responding. If that is what
-                  // the device shows, move these two lines into bcHandleDdClick's
-                  // matching early return instead: that handler is capture-phase, so
-                  // the click target is already resolved by the time it runs and hiding
-                  // the menu there cannot retarget it.
-                  if (t.closest('.dd-menu')) {
-                    var hasDd = t.closest('.has-dd');
-                    if (hasDd) hasDd.classList.remove('touch-open');
-                    return;
-                  }
+                  // touch-open is deliberately NOT cleared here. Doing so on touchend
+                  // hides the menu before the activating click is dispatched, and if
+                  // Blink re-hit-tests at click time it can find nothing — which would
+                  // kill the very link the user tapped. The clear lives in
+                  // bcHandleDdClick instead; see the note there.
+                  if (t.closest('.dd-menu')) return;
 
                   // 2.116621.48 — THIS IS THE FIX FOR THE DEAD BUTTON.
                   //
@@ -304,7 +288,27 @@ const ACADEMY_INJECT_MAIN = `
                   var t = e.target;
                   if (!t || typeof t.closest !== 'function') return;
                   // Menu links must stay clickable — check this before anything else.
-                  if (t.closest('.dd-menu')) return;
+                  //
+                  // 2.116621.54 — clear touch-open on the way out, and do it HERE rather
+                  // than in the touchend handler.
+                  //
+                  // Why it must be cleared at all: Skilljar's Search opens an IN-PAGE
+                  // overlay, not a new document. No navigation means none of the clears
+                  // fire — not the pushState/replaceState hooks, not popstate, not
+                  // pagehide, not the .50 navigation clear — so the class stayed set and
+                  // the menu rendered over the overlay until the user navigated away for
+                  // real. That is the permanent overlay that was reported.
+                  //
+                  // Why here and not on touchend: touchend fires BEFORE the activating
+                  // click, so hiding the menu there can leave Blink re-hit-testing at
+                  // click time and finding nothing — killing the link that was tapped,
+                  // Search included. By the time a click is dispatched its target is
+                  // already resolved, so hiding the menu now cannot retarget it.
+                  if (t.closest('.dd-menu')) {
+                    var hasDd = t.closest('.has-dd');
+                    if (hasDd) hasDd.classList.remove('touch-open');
+                    return;
+                  }
                   var ddc = t.closest('.has-dd');
                   if (!ddc) return;
                   // Same rule as the touch handler: if there is no menu to open, this
