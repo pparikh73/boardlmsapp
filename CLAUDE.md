@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.52`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.53`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -799,6 +799,54 @@ hamburger are skipped, a mid-bar absolute overlay is still returned to flow, dro
 stay skipped either way. Both injected scripts pass `node --check`; typecheck identical to
 baseline.
 
+Version `2.116621.53` carries two fixes: a genuine code defect behind the Search-page
+overlay, and the per-render work behind the Back/Home lag.
+
+**1. The Search overlay — `querySelector` never matches the element it is called on.**
+
+The guard added in `.48` and narrowed in `.52` read:
+
+    if (kidAbsolute[j] && !kidRightAnchored[j] && !kids[j].querySelector('.dd-menu'))
+
+`Element.querySelector()` searches **descendants only**. A direct child of the header that
+*contains* a `.dd-menu` was correctly skipped; a direct child that **is** the `.dd-menu`
+returned `null` and fell straight through to the write. That panel is absolutely positioned
+on purpose, so forcing it to `position: static` dropped it into the flex row created two
+lines earlier — where it takes real layout space and renders **permanently** over the page.
+That matches the report exactly: permanent rather than transient, only in this app, and
+surviving a full reload because the script re-applies it to the fresh DOM every time.
+
+`matches()` now covers the element itself; `querySelector` still covers a container of one.
+One condition, one code line. Verified 7/7 on a decision table, including both the
+left-anchored `.dd-menu` child (the bug) and the right-anchored hamburger from `.52`.
+
+This one is a **provable defect** — the `querySelector` contract is not in doubt. What
+remains inference is whether that panel is in fact a direct child of Skilljar's header.
+
+**2. Back/Home lag — both injected scripts hoisted to module scope.**
+
+They were template literals **inside the component body**, so every render rebuilt roughly
+48 KB of string and handed it to the prop diff. `onLoadEnd` fired two unconditional
+`setState` calls per navigation, so every Back and Home tap paid that cost twice. Nothing in
+either script is per-instance or per-render — the only interpolation is `Platform.OS`, which
+is constant for the process, so resolving it once at module load is exactly equivalent.
+
+`ACADEMY_INJECT_BEFORE` and `ACADEMY_INJECT_MAIN` are now declared above the component, and
+the state writes are guarded (`if (loading)` / `if (refreshing)`).
+
+**The hoist is provably a pure move**, which matters because the raw diff looks large
+(+235/−212) purely from relocating two big blocks:
+
+- before-content script: 5987 chars → 5987 chars, **byte-identical**
+- main script: differs by **exactly one code line** (the `matches()` condition above) plus
+  seven comment lines
+- component body, with both literals masked: **eight changed code lines** — the two
+  `setState` guards and the two props now referencing the consts. Nothing else.
+
+Remaining per-navigation costs are left alone deliberately, all previously documented and
+already minimal: the three 300 ms pollers, the blocking `onShouldStartLoadWithRequest` on
+Android, and `.50`'s single dropdown-clear round trip.
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -1001,6 +1049,17 @@ been started yet.
   literal, in code or prose. Always extract both scripts and `node --check` them after
   editing: a short extraction length is itself the signal (`.47` came back at 1713 chars
   against an expected ~37000).
+- **`querySelector()` never matches the element it is called on — only descendants.** A guard
+  written as `!el.querySelector('.thing')` silently fails when `el` IS the thing, which is
+  how an absolutely-positioned `.dd-menu` panel got forced to `position: static` and rendered
+  permanently over the Search page (`.53`). Pair it with `matches()` whenever the element
+  itself is a legitimate hit.
+- **Keep injected scripts at MODULE scope, never inside the component body.** As template
+  literals in the body they were rebuilt on every render — roughly 48 KB — and `onLoadEnd`
+  fired two unconditional `setState` calls per navigation, so Back and Home paid it twice.
+  Guard state writes (`if (loading) setLoading(false)`) so a no-op does not schedule a render.
+  The only interpolation these scripts have is `Platform.OS`, constant for the process, so
+  module scope is exactly equivalent.
 - **Every injected-JS fix should be wrapped in its own `try/catch`.** Sites change their
   DOM shape without notice; one throwing selector shouldn't silently abort every other
   fix in the same injection block.

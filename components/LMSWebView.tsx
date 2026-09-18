@@ -15,215 +15,15 @@ export interface LMSWebViewHandle {
   goHome: () => void;
 }
 
-const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
-  ({ url, onLogout, isFocused = true, showNavBar = false }, ref) => {
-    const webViewRef = useRef<WebView>(null);
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
-    // 2.116621.47 — the full-screen white overlay is shown for the FIRST load only.
-    //
-    // The reported white page is this overlay (styles.loadingOverlay is opaque white
-    // and absoluteFill) covering the old page between onLoadStart and onLoadEnd.
-    // Note it was never an SPA problem: Android fires onPageStarted for real
-    // navigations only, so a history.pushState route change does not raise
-    // onLoadStart and never showed the overlay in the first place — "suppress it for
-    // SPA navigations" would have changed nothing. Tapping Search is a real document
-    // load, which is why it flashed white.
-    //
-    // Subsequent loads now leave the previous page on screen until the new one
-    // paints, which is what a browser does. The first load still needs the overlay:
-    // there is no previous page, and the alternative is a blank WebView.
-    const hasLoadedOnceRef = useRef(false);
-
-    useImperativeHandle(ref, () => ({
-      goHome: () => {
-        webViewRef.current?.injectJavaScript(`window.location.href = '${url}'; true;`);
-      },
-    }));
-
-    // Pause all videos when the tab loses focus to free GPU/decoder memory
-    useEffect(() => {
-      if (!isFocused) {
-        webViewRef.current?.injectJavaScript(
-          `document.querySelectorAll('video').forEach(function(v){try{v.pause();}catch(e){}});true;`
-        );
-      }
-    }, [isFocused]);
-
-    // Last URL bounced, so the multiple onNavigationStateChange events a single
-    // navigation produces (loading true, then false) are only acted on once.
-    const lastBouncedRef = useRef<string | null>(null);
-
-    // 2.116621.50 — last URL we have cleared dropdowns for. Distinct from
-    // lastBouncedRef, which only tracks OFF-DOMAIN urls and is reset to null on every
-    // allowed one, so it cannot double as a previous-URL tracker.
-    const lastUrlRef = useRef<string | null>(null);
-
-    function handleNavigationChange(nav: WebViewNavigation) {
-      if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
-        onLogout?.();
-      }
-
-      // 2.116621.48 — the dropdown-clearing injectJavaScript that .46 put here is
-      // GONE, and that is the Back-button latency fix.
-      //
-      // It ran unconditionally on EVERY navigation state change, before any early
-      // return. This callback fires more than once per navigation (see lastBouncedRef
-      // above: loading true, then false), and each injectJavaScript is a bridge call
-      // that becomes an evaluateJavascript on the Android UI thread — so every
-      // navigation, Back included, carried two or more extra round trips for work
-      // that was already done.
-      //
-      // It was also redundant. The injected hooks cover every navigation form there
-      // is: pushState and replaceState are wrapped, popstate covers Back, pagehide
-      // covers unload — and a real document load re-injects the scripts from scratch,
-      // so touch-open cannot survive one anyway. Nothing is lost by deleting this.
-
-      // 2.116621.50 — clear any stale open dropdown ONCE per completed navigation.
-      //
-      // This is deliberately not the .46 version. That one fired on EVERY state change
-      // including loading === true, which is two or more evaluateJavascript round trips
-      // per navigation on the Android UI thread and is what made Back feel slow. This
-      // fires on the loading === false edge only, and only when the URL actually
-      // changed, so it costs at most ONE bridge call per navigation and none at all
-      // when a navigation re-reports the same URL.
-      //
-      // Placed above the Android early-return below: the dropdown is a touch
-      // affordance on both platforms, so this must not sit inside that block.
-      //
-      // Scope note for whoever reads this next: on a genuine full document load the
-      // scripts are re-injected into a fresh DOM that never had touch-open, so this
-      // call is a no-op there. It earns its place on the paths where the document is
-      // reused — a pushState route that the in-page hooks somehow miss, or a
-      // same-document navigation — and as a cheap backstop that cannot regress the
-      // Back-button latency the way the unconditional version did.
-      if (nav.loading === false && nav.url !== lastUrlRef.current) {
-        lastUrlRef.current = nav.url;
-        webViewRef.current?.injectJavaScript(
-          "document.querySelectorAll('.has-dd.touch-open').forEach(function(el){el.classList.remove('touch-open');}); true;"
-        );
-      }
-
-      // ANDROID allowlist enforcement lives here, not in onShouldStartLoadWithRequest.
-      // That callback BLOCKS the Android WebView thread for up to 250ms per navigation
-      // (RNCWebViewClient.shouldOverrideUrlLoading waits on a lock) and carries no
-      // isTopFrame, so it cannot tell a sub-frame load from a real navigation — which
-      // is what made typing in Skilljar's search field hang the app. This callback is
-      // non-blocking and only reports committed TOP-LEVEL navigation, so the same
-      // guarantee is enforced without stalling the thread.
-      //
-      // The age-rating guarantee is preserved, not weakened: an off-domain page is
-      // still never browsable in-app. It is stopped and handed to the system browser
-      // on the first state change, which is the same outcome, one frame later.
-      if (Platform.OS !== 'android') return;
-      if (!nav.url || !/^https?:/i.test(nav.url)) return;
-      if (isAllowedWebViewUrl(nav.url)) {
-        lastBouncedRef.current = null;
-        return;
-      }
-      if (lastBouncedRef.current === nav.url) return;
-      lastBouncedRef.current = nav.url;
-      webViewRef.current?.stopLoading();
-      Linking.openURL(nav.url).catch(() => {});
-      // Return to allowed content rather than leaving a blank stopped page: go back
-      // if there is history, otherwise reload the tab's own URL.
-      if (nav.canGoBack) {
-        webViewRef.current?.goBack();
-      } else {
-        webViewRef.current?.injectJavaScript(`window.location.href = '${url}'; true;`);
-      }
-    }
-
-    function handleShouldStartLoadWithRequest(request: WebViewRequest): boolean {
-      const { url } = request;
-      // Only restrict top-level (user-initiated) navigation. This callback also fires for
-      // iframe sub-resource loads (e.g. Synthesia's video player embed) — blocking those
-      // sent them out to the system browser instead of playing inline, since the video
-      // vendor's domain isn't in the allowlist. Apple's "unrestricted web access" concern
-      // is about the user browsing to arbitrary sites, not first-party embedded content.
-      if ((request as any).isTopFrame === false) return true;
-      // In-page schemes must load in the WebView and must NEVER reach Linking.
-      // On Android every Linking.openURL fires an Intent resolution, and in-page
-      // widgets (search autocomplete especially) navigate to about:blank / blob:
-      // routinely — one per keystroke was a large part of the search freeze.
-      if (/^(about|blob|data|javascript|file):/i.test(url)) return true;
-      // Genuine external schemes (mailto:, tel:) still hand off to the OS. Kept on
-      // both platforms: these are rare and deliberate, not per-keystroke traffic.
-      if (!/^https?:/i.test(url)) {
-        Linking.openURL(url).catch(() => {});
-        return false;
-      }
-      // ANDROID: stop here. This callback blocks the WebView thread, so it does the
-      // cheapest possible thing for http(s) and defers the allowlist to
-      // handleNavigationChange above, which is non-blocking and top-frame only.
-      if (Platform.OS === 'android') return true;
-      // iOS: enforce inline. decidePolicyForNavigationAction is async and the event
-      // carries a real isTopFrame, so neither problem applies here.
-      // Restrict to Board/Skilljar domains so Apple rates the app 4+ (not 17+)
-      if (isAllowedWebViewUrl(url)) return true;
-      Linking.openURL(url).catch(() => {});
-      return false;
-    }
-
-    return (
-      <View style={styles.container}>
-        {showNavBar && (
-          <View style={styles.navBar}>
-            <TouchableOpacity
-              style={styles.navBtn}
-              onPress={() => webViewRef.current?.goBack()}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="chevron-back" size={22} color={BRAND.white} />
-              <Text style={styles.navBtnText}>Back</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.navBtn}
-              onPress={() => webViewRef.current?.injectJavaScript(`window.location.href = '${url}'; true;`)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="home-outline" size={20} color={BRAND.white} />
-            </TouchableOpacity>
-          </View>
-        )}
-        <WebView
-          ref={webViewRef}
-          source={{ uri: url }}
-          style={styles.webview}
-          onLoadStart={() => {
-            if (!hasLoadedOnceRef.current) setLoading(true);
-          }}
-          onLoadEnd={() => {
-            hasLoadedOnceRef.current = true;
-            setLoading(false);
-            setRefreshing(false);
-          }}
-          onNavigationStateChange={handleNavigationChange}
-          onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
-          sharedCookiesEnabled
-          thirdPartyCookiesEnabled
-          overScrollMode="never"
-          directionalLockEnabled
-          allowsInlineMediaPlayback
-          // false — needed for the SCORM lesson video's async player to call .play()
-          // after a tap. Confirmed via diagnostic that the "black screen on load" this
-          // previously caused is the SCORM player's own loading state (rendering black
-          // before it inserts its <video> element) — content behavior, not something
-          // this setting controls.
-          mediaPlaybackRequiresUserAction={false}
-          setSupportMultipleWindows={false}
-          allowsBackForwardNavigationGestures
-          userAgent={WEBVIEW_USER_AGENT}
-          onContentProcessDidTerminate={() => webViewRef.current?.reload()}
-          onRenderProcessGone={() => webViewRef.current?.reload()}
-          // This script (and only this one) runs inside EVERY frame — including
-          // cross-origin iframes — because WKWebView injects it natively into each
-          // frame's own JS context rather than bridging it in from the parent. That's
-          // the only way to reach a cross-origin lesson-video vendor's <video> element
-          // at all: normal injectedJavaScript can't touch iframe.contentDocument once
-          // the iframe is a different origin, no matter what we try from the parent.
-          injectedJavaScriptBeforeContentLoadedForMainFrameOnly={false}
-          injectedJavaScriptBeforeContentLoaded={`
+// 2.116621.53 — both injected scripts live at MODULE scope.
+//
+// They used to be template literals inside the component body, so every render
+// rebuilt roughly 48 KB of string and handed it to the diff. onLoadEnd fires two
+// setState calls per navigation, so Back and Home paid that cost on every tap.
+// Nothing about the scripts is per-instance or per-render: the only interpolation
+// is Platform.OS, which is constant for the life of the process, so resolving it
+// once at module load is exactly equivalent.
+const ACADEMY_INJECT_BEFORE = `
             (function() {
               try {
                 var meta = document.querySelector('meta[name="viewport"]');
@@ -333,8 +133,9 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
               } catch (e) {}
             })();
             true;
-          `}
-          injectedJavaScript={`
+          `;
+
+const ACADEMY_INJECT_MAIN = `
             (function() {
               // Every independent fix below is wrapped in its own try/catch so one
               // throwing (e.g. an unexpected DOM shape on a given page) can't silently
@@ -967,7 +768,15 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                       // Also still skips any direct child that hosts a dropdown: forcing
                       // one into flow gives it real layout space over the nav where it
                       // can swallow touches.
+                      // 2.116621.53 — querySelector searches DESCENDANTS ONLY and
+                      // never the element it is called on, so a direct child that IS
+                      // the .dd-menu returned null here and fell through to the write.
+                      // An absolutely-positioned menu panel forced to static drops into
+                      // the flex row created above and takes real layout space — the
+                      // permanent overlay on the Search page. matches() covers the
+                      // element itself; querySelector still covers a container of one.
                       if (kidAbsolute[j] && !kidRightAnchored[j] &&
+                          !(kids[j].matches && kids[j].matches('.dd-menu')) &&
                           !kids[j].querySelector('.dd-menu')) {
                         kids[j].style.setProperty('position', 'static', 'important');
                       }
@@ -1055,7 +864,221 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
 
             })();
             true;
-          `}
+          `;
+
+const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
+  ({ url, onLogout, isFocused = true, showNavBar = false }, ref) => {
+    const webViewRef = useRef<WebView>(null);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    // 2.116621.47 — the full-screen white overlay is shown for the FIRST load only.
+    //
+    // The reported white page is this overlay (styles.loadingOverlay is opaque white
+    // and absoluteFill) covering the old page between onLoadStart and onLoadEnd.
+    // Note it was never an SPA problem: Android fires onPageStarted for real
+    // navigations only, so a history.pushState route change does not raise
+    // onLoadStart and never showed the overlay in the first place — "suppress it for
+    // SPA navigations" would have changed nothing. Tapping Search is a real document
+    // load, which is why it flashed white.
+    //
+    // Subsequent loads now leave the previous page on screen until the new one
+    // paints, which is what a browser does. The first load still needs the overlay:
+    // there is no previous page, and the alternative is a blank WebView.
+    const hasLoadedOnceRef = useRef(false);
+
+    useImperativeHandle(ref, () => ({
+      goHome: () => {
+        webViewRef.current?.injectJavaScript(`window.location.href = '${url}'; true;`);
+      },
+    }));
+
+    // Pause all videos when the tab loses focus to free GPU/decoder memory
+    useEffect(() => {
+      if (!isFocused) {
+        webViewRef.current?.injectJavaScript(
+          `document.querySelectorAll('video').forEach(function(v){try{v.pause();}catch(e){}});true;`
+        );
+      }
+    }, [isFocused]);
+
+    // Last URL bounced, so the multiple onNavigationStateChange events a single
+    // navigation produces (loading true, then false) are only acted on once.
+    const lastBouncedRef = useRef<string | null>(null);
+
+    // 2.116621.50 — last URL we have cleared dropdowns for. Distinct from
+    // lastBouncedRef, which only tracks OFF-DOMAIN urls and is reset to null on every
+    // allowed one, so it cannot double as a previous-URL tracker.
+    const lastUrlRef = useRef<string | null>(null);
+
+    function handleNavigationChange(nav: WebViewNavigation) {
+      if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
+        onLogout?.();
+      }
+
+      // 2.116621.48 — the dropdown-clearing injectJavaScript that .46 put here is
+      // GONE, and that is the Back-button latency fix.
+      //
+      // It ran unconditionally on EVERY navigation state change, before any early
+      // return. This callback fires more than once per navigation (see lastBouncedRef
+      // above: loading true, then false), and each injectJavaScript is a bridge call
+      // that becomes an evaluateJavascript on the Android UI thread — so every
+      // navigation, Back included, carried two or more extra round trips for work
+      // that was already done.
+      //
+      // It was also redundant. The injected hooks cover every navigation form there
+      // is: pushState and replaceState are wrapped, popstate covers Back, pagehide
+      // covers unload — and a real document load re-injects the scripts from scratch,
+      // so touch-open cannot survive one anyway. Nothing is lost by deleting this.
+
+      // 2.116621.50 — clear any stale open dropdown ONCE per completed navigation.
+      //
+      // This is deliberately not the .46 version. That one fired on EVERY state change
+      // including loading === true, which is two or more evaluateJavascript round trips
+      // per navigation on the Android UI thread and is what made Back feel slow. This
+      // fires on the loading === false edge only, and only when the URL actually
+      // changed, so it costs at most ONE bridge call per navigation and none at all
+      // when a navigation re-reports the same URL.
+      //
+      // Placed above the Android early-return below: the dropdown is a touch
+      // affordance on both platforms, so this must not sit inside that block.
+      //
+      // Scope note for whoever reads this next: on a genuine full document load the
+      // scripts are re-injected into a fresh DOM that never had touch-open, so this
+      // call is a no-op there. It earns its place on the paths where the document is
+      // reused — a pushState route that the in-page hooks somehow miss, or a
+      // same-document navigation — and as a cheap backstop that cannot regress the
+      // Back-button latency the way the unconditional version did.
+      if (nav.loading === false && nav.url !== lastUrlRef.current) {
+        lastUrlRef.current = nav.url;
+        webViewRef.current?.injectJavaScript(
+          "document.querySelectorAll('.has-dd.touch-open').forEach(function(el){el.classList.remove('touch-open');}); true;"
+        );
+      }
+
+      // ANDROID allowlist enforcement lives here, not in onShouldStartLoadWithRequest.
+      // That callback BLOCKS the Android WebView thread for up to 250ms per navigation
+      // (RNCWebViewClient.shouldOverrideUrlLoading waits on a lock) and carries no
+      // isTopFrame, so it cannot tell a sub-frame load from a real navigation — which
+      // is what made typing in Skilljar's search field hang the app. This callback is
+      // non-blocking and only reports committed TOP-LEVEL navigation, so the same
+      // guarantee is enforced without stalling the thread.
+      //
+      // The age-rating guarantee is preserved, not weakened: an off-domain page is
+      // still never browsable in-app. It is stopped and handed to the system browser
+      // on the first state change, which is the same outcome, one frame later.
+      if (Platform.OS !== 'android') return;
+      if (!nav.url || !/^https?:/i.test(nav.url)) return;
+      if (isAllowedWebViewUrl(nav.url)) {
+        lastBouncedRef.current = null;
+        return;
+      }
+      if (lastBouncedRef.current === nav.url) return;
+      lastBouncedRef.current = nav.url;
+      webViewRef.current?.stopLoading();
+      Linking.openURL(nav.url).catch(() => {});
+      // Return to allowed content rather than leaving a blank stopped page: go back
+      // if there is history, otherwise reload the tab's own URL.
+      if (nav.canGoBack) {
+        webViewRef.current?.goBack();
+      } else {
+        webViewRef.current?.injectJavaScript(`window.location.href = '${url}'; true;`);
+      }
+    }
+
+    function handleShouldStartLoadWithRequest(request: WebViewRequest): boolean {
+      const { url } = request;
+      // Only restrict top-level (user-initiated) navigation. This callback also fires for
+      // iframe sub-resource loads (e.g. Synthesia's video player embed) — blocking those
+      // sent them out to the system browser instead of playing inline, since the video
+      // vendor's domain isn't in the allowlist. Apple's "unrestricted web access" concern
+      // is about the user browsing to arbitrary sites, not first-party embedded content.
+      if ((request as any).isTopFrame === false) return true;
+      // In-page schemes must load in the WebView and must NEVER reach Linking.
+      // On Android every Linking.openURL fires an Intent resolution, and in-page
+      // widgets (search autocomplete especially) navigate to about:blank / blob:
+      // routinely — one per keystroke was a large part of the search freeze.
+      if (/^(about|blob|data|javascript|file):/i.test(url)) return true;
+      // Genuine external schemes (mailto:, tel:) still hand off to the OS. Kept on
+      // both platforms: these are rare and deliberate, not per-keystroke traffic.
+      if (!/^https?:/i.test(url)) {
+        Linking.openURL(url).catch(() => {});
+        return false;
+      }
+      // ANDROID: stop here. This callback blocks the WebView thread, so it does the
+      // cheapest possible thing for http(s) and defers the allowlist to
+      // handleNavigationChange above, which is non-blocking and top-frame only.
+      if (Platform.OS === 'android') return true;
+      // iOS: enforce inline. decidePolicyForNavigationAction is async and the event
+      // carries a real isTopFrame, so neither problem applies here.
+      // Restrict to Board/Skilljar domains so Apple rates the app 4+ (not 17+)
+      if (isAllowedWebViewUrl(url)) return true;
+      Linking.openURL(url).catch(() => {});
+      return false;
+    }
+
+    return (
+      <View style={styles.container}>
+        {showNavBar && (
+          <View style={styles.navBar}>
+            <TouchableOpacity
+              style={styles.navBtn}
+              onPress={() => webViewRef.current?.goBack()}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="chevron-back" size={22} color={BRAND.white} />
+              <Text style={styles.navBtnText}>Back</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.navBtn}
+              onPress={() => webViewRef.current?.injectJavaScript(`window.location.href = '${url}'; true;`)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="home-outline" size={20} color={BRAND.white} />
+            </TouchableOpacity>
+          </View>
+        )}
+        <WebView
+          ref={webViewRef}
+          source={{ uri: url }}
+          style={styles.webview}
+          onLoadStart={() => {
+            if (!hasLoadedOnceRef.current) setLoading(true);
+          }}
+          onLoadEnd={() => {
+            hasLoadedOnceRef.current = true;
+            // 2.116621.53 — guarded. Unconditional setState on a value that is already
+            // false still schedules a render pass; two of them fired on every
+            // navigation, Back included.
+            if (loading) setLoading(false);
+            if (refreshing) setRefreshing(false);
+          }}
+          onNavigationStateChange={handleNavigationChange}
+          onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
+          sharedCookiesEnabled
+          thirdPartyCookiesEnabled
+          overScrollMode="never"
+          directionalLockEnabled
+          allowsInlineMediaPlayback
+          // false — needed for the SCORM lesson video's async player to call .play()
+          // after a tap. Confirmed via diagnostic that the "black screen on load" this
+          // previously caused is the SCORM player's own loading state (rendering black
+          // before it inserts its <video> element) — content behavior, not something
+          // this setting controls.
+          mediaPlaybackRequiresUserAction={false}
+          setSupportMultipleWindows={false}
+          allowsBackForwardNavigationGestures
+          userAgent={WEBVIEW_USER_AGENT}
+          onContentProcessDidTerminate={() => webViewRef.current?.reload()}
+          onRenderProcessGone={() => webViewRef.current?.reload()}
+          // This script (and only this one) runs inside EVERY frame — including
+          // cross-origin iframes — because WKWebView injects it natively into each
+          // frame's own JS context rather than bridging it in from the parent. That's
+          // the only way to reach a cross-origin lesson-video vendor's <video> element
+          // at all: normal injectedJavaScript can't touch iframe.contentDocument once
+          // the iframe is a different origin, no matter what we try from the parent.
+          injectedJavaScriptBeforeContentLoadedForMainFrameOnly={false}
+          injectedJavaScriptBeforeContentLoaded={ACADEMY_INJECT_BEFORE}
+          injectedJavaScript={ACADEMY_INJECT_MAIN}
         />
         {loading && !refreshing && (
           <View style={styles.loadingOverlay}>
