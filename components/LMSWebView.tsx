@@ -229,9 +229,31 @@ const ACADEMY_INJECT_MAIN = `
                   }
 
                   // A tap INSIDE the revealed menu is a real link. Return before both
-                  // the preventDefault and the toggle, so menu links stay clickable and
-                  // the menu does not close under the finger mid-tap.
-                  if (t.closest('.dd-menu')) return;
+                  // the preventDefault and the toggle, so menu links stay clickable.
+                  //
+                  // 2.116621.54 — but clear touch-open on the way out. A tap on a menu
+                  // link used to return here with the class still set. When the target
+                  // opens an IN-PAGE overlay rather than navigating — Skilljar's Search
+                  // does — there is no document load, so nothing ever removed the class:
+                  // not the history hooks, not pagehide, not the .50 navigation clear,
+                  // none of which fire without a navigation. The menu therefore stayed
+                  // rendered over the overlay until the user navigated away for real,
+                  // which is exactly the reported permanent overlay.
+                  //
+                  // KNOWN RISK, recorded so device testing knows what to look for:
+                  // removing the class here hides the menu on touchend, and the click
+                  // that activates the link is dispatched AFTER that. If Blink
+                  // re-hit-tests at click time it may find nothing, and menu links —
+                  // including Search itself — could stop responding. If that is what
+                  // the device shows, move these two lines into bcHandleDdClick's
+                  // matching early return instead: that handler is capture-phase, so
+                  // the click target is already resolved by the time it runs and hiding
+                  // the menu there cannot retarget it.
+                  if (t.closest('.dd-menu')) {
+                    var hasDd = t.closest('.has-dd');
+                    if (hasDd) hasDd.classList.remove('touch-open');
+                    return;
+                  }
 
                   // 2.116621.48 — THIS IS THE FIX FOR THE DEAD BUTTON.
                   //

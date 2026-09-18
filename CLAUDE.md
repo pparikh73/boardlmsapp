@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.53`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.54`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -847,6 +847,43 @@ Remaining per-navigation costs are left alone deliberately, all previously docum
 already minimal: the three 300 ms pollers, the blocking `onShouldStartLoadWithRequest` on
 Android, and `.50`'s single dropdown-clear round trip.
 
+Version `2.116621.54` clears `touch-open` when a tap lands inside the open menu. One
+condition body; five lines of code, one file.
+
+**The fact that settled it**: the overlay appears only when Get Started was opened first, and
+never otherwise. So `touch-open` is unambiguously the trigger — but `.53`'s trace showed
+`touch-open` cannot survive a full document load, because the new page is a fresh DOM. Both
+of those are true, so the premise that had to give was "tapping Search is a navigation".
+
+**It is not.** Skilljar's Search opens an **in-page overlay** — same document, no page load —
+and `bcHandleDdTouch` returned at the `.dd-menu` early return with the class still set. So
+nothing ever removed it: not the `pushState`/`replaceState` hooks, not `popstate`, not
+`pagehide`, not `.50`'s navigation clear. **None of those fire without a navigation.** The
+menu stayed rendered over the search overlay until the user navigated away for real, which is
+exactly the "permanent, only dismissed by navigating away entirely" report.
+
+The early return now clears the class on its way out:
+
+    if (t.closest('.dd-menu')) {
+      var hasDd = t.closest('.has-dd');
+      if (hasDd) hasDd.classList.remove('touch-open');
+      return;
+    }
+
+Behaviour verified on all four tap paths: menu link clears and returns, trigger toggles both
+ways, outside tap still closes all.
+
+**KNOWN RISK — read this before judging the device test.** Removing the class on `touchend`
+hides the menu, and the click that activates the link is dispatched **after** that. If Blink
+re-hit-tests at click time it may find nothing, and menu links — **including Search itself** —
+could stop responding. That is precisely what the comment this change replaced was guarding
+against ("the menu does not close under the finger mid-tap").
+
+If the device shows menu links dead, the fix is to move those two lines into
+`bcHandleDdClick`'s matching early return instead. That handler is also capture-phase, but by
+the time a click is dispatched its target is already resolved, so hiding the menu there
+cannot retarget it. Same effect, no hit-test window.
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -1015,6 +1052,16 @@ been started yet.
   dedicated ref — so it costs at most one bridge call per navigation. And note what such a
   clear can and cannot do: a real document load re-injects into a fresh DOM that never had
   the class, so it is a no-op there; it only matters when the document is reused.
+- **In-page overlays are not navigations, and none of the navigation clears fire for them.**
+  Skilljar's Search opens an overlay in the same document. `pushState`/`replaceState`,
+  `popstate`, `pagehide` and the `onNavigationStateChange` clear ALL require a navigation, so
+  a class like `touch-open` left set before an overlay opens is never cleared and the menu
+  renders over the overlay permanently (`.54`). Clear in-page state at the interaction that
+  causes it, not on a navigation that may never come.
+- **Hiding a menu on `touchend` can kill the link that was tapped.** The activating click is
+  dispatched after `touchend`, so a menu hidden in that handler may not be hit-testable when
+  the click resolves. If a menu link stops responding, move the hide into the capture-phase
+  `click` handler: the target is already resolved there, so hiding cannot retarget it.
 - **Never `preventDefault()` a control's native behaviour unless you can deliver the
   replacement.** The capture-phase dropdown handler suppressed the Get Started link's
   navigation on every tap, then relied on a class toggle whose visible effect depended on a
