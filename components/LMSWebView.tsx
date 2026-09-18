@@ -900,8 +900,18 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                     var kids = header.children;
                     var needFlex = window.getComputedStyle(header).display.indexOf('flex') === -1;
                     var kidAbsolute = [];
+                    var kidRightAnchored = [];
+                    // Read once, in PHASE 1. The right-anchor test needs geometry, and
+                    // doing it in the write loop below would be a read AFTER a write —
+                    // forced synchronous layout, the exact defect .45 removed.
+                    var bcViewportW = window.innerWidth;
                     for (var i = 0; i < kids.length; i++) {
                       kidAbsolute[i] = window.getComputedStyle(kids[i]).position === 'absolute';
+                      kidRightAnchored[i] = false;
+                      if (kidAbsolute[i]) {
+                        var kr = kids[i].getBoundingClientRect();
+                        kidRightAnchored[i] = (bcViewportW - kr.right) < 50;
+                      }
                     }
                     var bcImgs = header.getElementsByTagName('img');
                     // The logo is the widest image; used below to decide which direct
@@ -929,19 +939,36 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
                     header.style.setProperty('flex-wrap', 'nowrap', 'important');
 
                     // An absolutely-positioned child is out of flow, so no flex rule
-                    // can keep it clear of the logo — that is the overlap. Restricted
-                    // to DIRECT children: a dropdown panel deeper in the tree is
-                    // legitimately absolute and must stay that way to open correctly.
+                    // can keep it clear of the logo — that is what .34 called the
+                    // overlap. Restricted to DIRECT children: a dropdown panel deeper
+                    // in the tree is legitimately absolute and must stay that way.
+                    //
+                    // 2.116621.52 — NEVER un-anchor a RIGHT-PINNED control.
+                    //
+                    // This write is the leading suspect for two device reports: the
+                    // language selector / hamburger rendering in the middle of the bar
+                    // instead of the top right, and the Search page looking scrambled.
+                    // A top-right control is positioned absolute against the right edge;
+                    // forcing it to static drops it into the flex row this function just
+                    // created at the line above, and normal flow puts it wherever the
+                    // content happens to land — the middle. Both symptoms appear only in
+                    // this app and never in a browser, which fits, because a browser does
+                    // not run this script and this function is not platform-gated.
+                    //
+                    // Strong inference, NOT proven: the confirming test is this build.
+                    // If the hamburger returns to the top right, it was this line.
+                    //
+                    // Skipping a right-anchored child costs .34 nothing. An element
+                    // pinned to the right edge cannot collide with a left-hand logo in
+                    // the first place — the collision .34 reported is the LOGO growing
+                    // under it, and that is contained by max-width: 55% and the shrink
+                    // factors further down, not by this write.
                     for (var j = 0; j < kids.length; j++) {
-                      // Skip any direct child that hosts a dropdown. Forcing an
-                      // absolutely-positioned element into flow puts it back in the
-                      // layout, where it can take real space over the nav and swallow
-                      // touches — and a dropdown host is precisely the element that is
-                      // absolute on purpose. PRECAUTIONARY, not a proven cause of the
-                      // dead button; the proven cause is the unconditional
-                      // preventDefault above. Costs nothing and removes a way for this
-                      // pass to break the control it sits next to.
-                      if (kidAbsolute[j] && !kids[j].querySelector('.dd-menu')) {
+                      // Also still skips any direct child that hosts a dropdown: forcing
+                      // one into flow gives it real layout space over the nav where it
+                      // can swallow touches.
+                      if (kidAbsolute[j] && !kidRightAnchored[j] &&
+                          !kids[j].querySelector('.dd-menu')) {
                         kids[j].style.setProperty('position', 'static', 'important');
                       }
                     }

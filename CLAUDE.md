@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.51`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.52`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -753,6 +753,52 @@ fresh DOM and `touch-open` cannot be the cause at all, which would mean the over
 compositor artefact rather than DOM state), or stop hijacking the Get Started control on
 Android and let it navigate to learning-paths as the site intends.
 
+Version `2.116621.52` stops `fixHeaderOverlap` un-anchoring right-pinned header controls.
+One condition changed plus a Phase-1 measurement; the rest of the function is untouched.
+
+**The suspect.** `fixHeaderOverlap` forced `position: static !important` on **every**
+absolutely-positioned direct child of the header, right after forcing the header itself to
+`display: flex` + `flex-wrap: nowrap`. A top-right control — the language selector /
+hamburger — is positioned absolute against the right edge. Forcing it to `static` drops it
+into that freshly-created flex row, and normal flow puts it wherever the content lands: the
+middle. Both device reports fit this: the hamburger in the middle of the bar, and the Search
+page "scrambled". Both appear only in this app and never in a browser, which is consistent —
+a browser does not run this script, and this function is **not platform-gated**.
+
+**This is a strong inference, not a proof.** Nothing here was reproduced on device; the
+confirming test is this build. If the hamburger returns to the top right, it was this write.
+If it does not, the cause is elsewhere and this change is harmless.
+
+**The fix.** An absolutely-positioned direct child is skipped when it is anchored within
+50px of the viewport's right edge, measured in **Phase 1** alongside `kidAbsolute`:
+
+    var bcViewportW = window.innerWidth;
+    ...
+    if (kidAbsolute[i]) {
+      var kr = kids[i].getBoundingClientRect();
+      kidRightAnchored[i] = (bcViewportW - kr.right) < 50;
+    }
+
+The measurement is deliberately **not** in the write loop. Doing it there would be a geometry
+read after a style write — forced synchronous layout, the exact defect `.45` removed and the
+one CLAUDE.md forbids.
+
+**Why this costs `.34` nothing.** `.34`'s commit claimed the `position: static` force *was*
+"the actual overlap", but that was never confirmed on device — and `.39` later recorded that
+`findFixedHeader()` returned null, so the whole pass never ran through `.34`, `.36` and `.37`.
+More importantly the claim does not hold up: an element pinned to the right edge cannot
+collide with a left-hand logo. The collision TJ reported is the **logo growing under it**, and
+that is contained by `max-width: 55%` plus the shrink factors further down — not by this
+write. Those are all still in place.
+
+The whole-function no-op was considered and rejected: it would also drop the logo sizing that
+`.37` and `.39` built on.
+
+Verified: 8/8 cases on a stubbed decision table — right-pinned language selector and
+hamburger are skipped, a mid-bar absolute overlay is still returned to flow, dropdown hosts
+stay skipped either way. Both injected scripts pass `node --check`; typecheck identical to
+baseline.
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -836,6 +882,15 @@ been started yet.
   document scrollWidth, whether the clip rule actually applied, the widest elements with
   their `position` values, and any nested horizontal scroll containers. It found this bug
   in one round after two blind attempts each cost a TestFlight cycle.
+- **`fixHeaderOverlap` must never un-anchor a right-pinned control.** It forces the header to
+  a `nowrap` flex row and then forces absolutely-positioned direct children to
+  `position: static`. A top-right control is absolute against the right edge, so that write
+  drops it into the flex row and normal flow lands it in the MIDDLE of the bar — which is
+  how the language selector / hamburger was reported. `.52` skips any absolute child within
+  50px of the right edge, measured in Phase 1 (never in the write loop — that would be a read
+  after a write). Remember this function runs on EVERY Academy page, is not platform-gated,
+  and a browser never runs it — so "correct in a browser, wrong in the app" points here
+  first.
 - **A "header" bug may not be in this codebase at all.** The Academy and Community screens
   render whole third-party sites, so a reported header, logo or nav defect is usually
   Skilljar's or Vanilla's own markup rather than a React Native component. Grep for the
