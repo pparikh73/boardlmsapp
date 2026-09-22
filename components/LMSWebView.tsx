@@ -735,7 +735,7 @@ const ACADEMY_INJECT_MAIN = `
                 new MutationObserver(function (records) {
                   try {
                     if (!document.querySelector('.has-dd.touch-open')) { bcSchedule(); return; }
-                    var SEL = 'input[type="search"], [role="search"], [role="dialog"], [aria-modal="true"]';
+                    var SEL = 'input[type="search"], input[type="text"], input:not([type]), [role="search"], [role="dialog"], [aria-modal="true"]';
                     var cleared = false;
                     for (var i = 0; i < records.length && !cleared; i++) {
                       var added = records[i].addedNodes;

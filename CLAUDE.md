@@ -979,6 +979,22 @@ node is or contains
 removed. Attributes only, no class names — a Skilljar build hash cannot silently stop it
 matching.
 
+**The three `input` forms are load-bearing, not padding.** The selector originally carried
+only `input[type="search"]`, and the evidence never supported that narrowness: Test A proves
+the focused element is an `<input>` or `<textarea>` (the `.55` listener tests `tagName` only)
+and says nothing about its `type`. A perfectly ordinary
+`<div class="sj-search-overlay"><input type="text"></div>` would have matched none of the
+four original selectors, and the build would have shipped doing nothing while looking exactly
+like the unfixed bug. `input[type="text"]` and `input:not([type])` close that. Bare `input`
+was rejected deliberately — it would match `hidden`, `checkbox`, `radio` and `file`, which
+forms and analytics insert routinely.
+
+Verified in real Blink (the engine Android WebView runs), with the selector extracted from
+this file rather than retyped: 15/15 cases. All three input shapes and all three ARIA forms
+match; `hidden`/`checkbox`/`radio`/`file` do not; and — the case that matters for
+self-closing — neither `<ul class="dd-menu">` nor `<div class="has-dd"><a class="sb-link">`
+matches, so opening the dropdown cannot clear its own class.
+
 **The latch is what keeps the search freeze fixed, and it is the part to preserve if anyone
 edits this again.** The callback's first statement is
 `if (!document.querySelector('.has-dd.touch-open')) { bcSchedule(); return; }`. When no
