@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.54`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.56`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -962,6 +962,48 @@ stand the observer down exactly when it is needed.
 **Untested on device.** Neither listener can regress the dropdown: both only ever remove
 `touch-open`, and neither runs for a target inside `.has-dd`.
 
+Version `2.116621.56` fixes the Search overlay. One observer callback wrapped; nothing else
+in the file touched.
+
+**Test A settled the open question before a line was written**, and it cost a tester a
+minute rather than a build: with the menu overlaying Search, typing into the search field
+**did** dismiss it. That proves two things at once. `touch-open` **is** what holds the menu
+open — so the sticky-`:hover` worry raised against `.55` is **refuted**, and a class clear is
+the right kind of fix. And `.55`'s `focusin` listener was correct in mechanism but fired too
+late: Skilljar's overlay does **not** autofocus its input, so nothing cleared until the user
+tapped the field by hand. The trigger had to move from focus time to **DOM-insertion time**.
+
+The observer already registered on `document.body` now inspects its records: when an added
+node is or contains
+`input[type="search"], [role="search"], [role="dialog"], [aria-modal="true"]`, `touch-open` is
+removed. Attributes only, no class names — a Skilljar build hash cannot silently stop it
+matching.
+
+**The latch is what keeps the search freeze fixed, and it is the part to preserve if anyone
+edits this again.** The callback's first statement is
+`if (!document.querySelector('.has-dd.touch-open')) { bcSchedule(); return; }`. When no
+dropdown is open — which is every keystroke of search autocomplete, the exact case that froze
+the app — the whole callback costs one selector match and then behaves precisely as before.
+The subtree scan can only run while the menu is actually open, and typing in search cannot
+overlap with that. `node.querySelector` also walks **that node's own subtree**, never the
+document, so it is categorically different from the full-document query that caused the
+freeze.
+
+**The clear is inline and deliberately NOT routed through `bcSchedule`.** That path is gated
+on `bcIsEditing()` and defers to the `focusout` catch-up — which is exactly the too-late
+behaviour being fixed. The expensive header work stays coalesced and gated exactly as it was.
+
+**No new observer and no new rAF loop**: the callback that was already registered here is
+wrapped. Counts stay at three and three, verified by grep. `bcHandleDdTouch`,
+`bcHandleDdClick`, `bcDdCloseAll`, `bcSchedule`, `bcScheduleMarkInline` and
+`bcScheduleVideoFix` are all byte-identical to `.55`, and the dropdown CSS is still the single
+open rule.
+
+**The one residual risk, recorded honestly**: if Skilljar pre-renders the overlay and merely
+toggles its visibility, `addedNodes` is empty and there is nothing to observe. Covering that
+would need `attributes: true` on this observer — back onto the freeze path — so do not reach
+for it without measuring first. **Untested on device.**
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -1128,6 +1170,20 @@ been started yet.
   above `document`, or a target detached between `touchstart` and `touchend`, whose
   propagation path contains neither `document` nor `window` and which **no** capture-phase
   listener can rescue. `.55` covers both with one listener each.
+- **Latch a mutation-path check on cheap state so it cannot run in the hot window.** `.56`
+  needs to scan `addedNodes` for Skilljar's search overlay, which is exactly the kind of work
+  that froze the app in `.38`-`.47`. It is safe only because the callback returns after one
+  `document.querySelector('.has-dd.touch-open')` whenever no dropdown is open — and a
+  dropdown is never open while someone is typing in search. Find the state that is false
+  during the expensive scenario and gate on it; do not rely on the scan being "small".
+  `node.querySelector` on an added node walks that node's subtree only, which is fine; a
+  full-document query in the same place is not.
+- **A free device observation beats another build.** `.46`-`.55` spent ten builds inferring
+  mechanism from one binary symptom, and `.49`, `.52`, `.53`, `.54` and `.55` each corrected
+  an earlier confident diagnosis. The question "does typing in the search field dismiss the
+  menu?" cost a tester sixty seconds, eliminated half the hypothesis space, and told us the
+  fix needed a different TRIGGER rather than a different mechanism. Ask for the cheap
+  observation before designing the next fix.
 - **When a control regresses across builds, `git diff` the last version that worked before
   reasoning about mechanisms.** `.46`-`.48` produced three plausible-sounding theories
   (display/hit-testing, sticky hover, a neutered `preventDefault`) and three failed fixes.

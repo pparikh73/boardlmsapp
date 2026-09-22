@@ -705,7 +705,55 @@ const ACADEMY_INJECT_MAIN = `
                 bcTasks.push(padForFixedHeader);
                 padForFixedHeader();
                 window.addEventListener('scroll', bcSchedule, { passive: true });
-                new MutationObserver(bcSchedule).observe(document.body, { childList: true, subtree: true });
+                // 2.116621.56 - clear the Get Started dropdown when Skilljar's Search
+                // overlay is INSERTED, not when its field is focused.
+                //
+                // Skilljar's Search opens an in-page overlay and does NOT autofocus its
+                // input, so the .55 focusin listener was right in mechanism but fired
+                // too late - only once the user tapped the field by hand. Device test
+                // confirmed both halves: typing in the field DID dismiss the menu, so
+                // touch-open is the cause; and it stayed up until then, so the trigger
+                // has to be DOM insertion.
+                //
+                // No new observer and no new rAF loop: this wraps the callback that was
+                // already registered here. Counts stay at three observers, three rAF
+                // loops.
+                //
+                // THE LATCH IS WHAT KEEPS THE SEARCH FREEZE FIXED. When no dropdown is
+                // open - which is every keystroke of search autocomplete, the case that
+                // froze the app - the callback does one selector match and calls
+                // bcSchedule exactly as before. The subtree scan can only run while the
+                // menu is actually open, and typing in search cannot overlap with that.
+                //
+                // Scanning addedNodes only, and node.querySelector walks that node's own
+                // subtree - never the document. Selector is semantic attributes only, so
+                // no Skilljar build hash can silently stop it matching.
+                //
+                // The clear is INLINE and deliberately not routed through bcSchedule:
+                // that path is gated on bcIsEditing() and would defer to the focusout
+                // catch-up, which is exactly the too-late behaviour being fixed.
+                new MutationObserver(function (records) {
+                  try {
+                    if (!document.querySelector('.has-dd.touch-open')) { bcSchedule(); return; }
+                    var SEL = 'input[type="search"], [role="search"], [role="dialog"], [aria-modal="true"]';
+                    var cleared = false;
+                    for (var i = 0; i < records.length && !cleared; i++) {
+                      var added = records[i].addedNodes;
+                      for (var j = 0; j < added.length; j++) {
+                        var node = added[j];
+                        if (!node || node.nodeType !== 1) continue;
+                        if ((node.matches && node.matches(SEL)) || node.querySelector(SEL)) {
+                          document.querySelectorAll('.has-dd.touch-open').forEach(function (el) {
+                            el.classList.remove('touch-open');
+                          });
+                          cleared = true;
+                          break;
+                        }
+                      }
+                    }
+                  } catch (e) {}
+                  bcSchedule();
+                }).observe(document.body, { childList: true, subtree: true });
                 var bcPollCount = 0;
                 var bcPollTimer = setInterval(function() {
                   bcSchedule();
