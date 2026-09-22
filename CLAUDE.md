@@ -667,6 +667,15 @@ properties, three identical dead-button reports, and a handler identical to the 
 worked. It also supersedes the `.47` note that the `display: none` mechanism was unproven:
 the mechanism is inheritance, and it applies to all three properties.
 
+> **CORRECTED IN `2.116621.55` — the inheritance explanation above is WRONG.** Skilljar's
+> real markup (shared by Ria, mapped in `.55`) is
+> `.has-dd > .sb-link` (the trigger `<a>`) **and** `.has-dd > .dd-menu` (a `<ul>`) as
+> **siblings**. `.dd-menu` does **not** contain the trigger, so hiding it cannot disable the
+> trigger by inheritance. **The empirical rule below still stands** — three closed-state
+> rules, three dead-button reports, is data — but its *cause is unknown*, not established.
+> Do not treat "it was inheritance" as a fact, and do not use its refutation as licence to
+> retry a closed-state rule.
+
 The injected CSS is now **byte-identical to `.41`**, verified by comparing the two
 stylesheets with whitespace stripped.
 
@@ -893,6 +902,66 @@ Behaviour verified across the full two-event sequence, not just one handler:
 The first row is the point: the menu is still open when the click resolves, so the link
 activates normally, and only then does the class clear.
 
+Version `2.116621.55` fixes the Search overlay for real, and records the DOM fact that shows
+why nothing before it could have. **Purely additive: two listeners, ~12 lines. No CSS, no
+mutation observer, and `bcHandleDdTouch`/`bcHandleDdClick`/`bcDdCloseAll` are byte-identical
+to `.54`.**
+
+**Skilljar's actual markup**, confirmed against the real file rather than inferred:
+
+    .has-dd            (div - Get Started container)
+      |- .sb-link      (a  - the trigger)
+      |- .dd-menu      (ul - the dropdown)
+           |- li > a   All Courses / Learning Paths / Version Releases
+
+**The Search control sits outside `.has-dd` and outside `.dd-menu` entirely** — a separate
+navbar element. Two consequences, both load-bearing:
+
+1. **`.54` was never reachable for this tap.** Its clear is guarded on
+   `t.closest('.dd-menu')`, and Search matches neither selector. The `.54` clear is correct
+   for real menu links and stays, but it could not have fixed this bug and did not.
+2. **The dropdown logic was already right.** A tap on Search or on the overlay has no
+   `.has-dd` ancestor, so `bcHandleDdTouch` should hit its own close-all on the first line.
+   It never runs. Device-confirmed: tapping anywhere in the Search overlay does **not**
+   dismiss the menu, while tapping the trigger still opens it. **So this is an event-delivery
+   defect, not a dropdown-logic defect** — the same listener gets `.has-dd` taps and not
+   Search taps.
+
+Two additive listeners, covering **disjoint** failure modes, because the precise mechanism
+is still unmeasured:
+
+- **`focusin` on `document`** (in `ACADEMY_INJECT_MAIN`, beside the existing registrations).
+  A different event class from touch/click, so whatever swallows those does not affect it;
+  it bubbles, where `focus` does not, so no capture phase is needed. Covers the case where
+  the control is **re-rendered between `touchstart` and `touchend`** — a detached target's
+  propagation path contains neither `document` nor `window`, so no capture-phase listener
+  anywhere can see it, but focus is dispatched on the newly attached input.
+- **`touchend` on `window`, capture phase** (in `ACADEMY_INJECT_BEFORE`, top frame only).
+  `window` capture is the earliest point in the path and this script runs before any of the
+  site's scripts, so it is registered first: a later `stopImmediatePropagation` on `window`
+  cannot skip it, and plain `stopPropagation` never affects another listener on the same
+  node. Clears only, and only for targets outside `.has-dd`, so it cannot fight the toggle —
+  `window` capture precedes `document` capture, so a tap on the trigger clears first and
+  `bcHandleDdTouch` then opens.
+
+**The top-frame check is hoisted out of the callback**, so no listener is registered in
+subframes at all — `injectedJavaScriptBeforeContentLoadedForMainFrameOnly={false}` means
+that script runs in every frame, including cross-origin video iframes, and the nav exists
+only in the top document.
+
+**Clearing on `touchend` is safe here, and the `.54` hit-test rule is not violated.** That
+rule is about hiding the element being tapped. Search is outside `.has-dd`, so clearing
+`touch-open` cannot retarget it. The rule still binds for taps on menu links, which is why
+`bcHandleDdTouch` is untouched.
+
+**Rejected: a `MutationObserver` on overlay insertion.** It would cover every variant, but
+we have no selector for the overlay, the mutation path is where the Android search freeze
+lived for four builds, and the overlay contains a text field — so `bcIsEditing()` would
+stand the observer down exactly when it is needed.
+
+**Untested on device.** Neither listener can regress the dropdown: both only ever remove
+`touch-open`, and neither runs for a target inside `.has-dd`.
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -1036,13 +1105,29 @@ been started yet.
   `.has-dd.touch-open .dd-menu` with `opacity`/`visibility`/`transform`/`pointer-events`
   set to their visible values. The site's own CSS does all the hiding. Adding
   `.has-dd:not(.touch-open) .dd-menu { display: none }` or `{ visibility: hidden;
-  pointer-events: none }` kills the TRIGGER, because all three properties **inherit to
-  descendants** and Skilljar's `.dd-menu` appears to wrap the trigger rather than sit beside
-  it. An inline style on the menu is not a safe workaround — it inherits identically.
+  pointer-events: none }` kills the TRIGGER. **Why is not known.** Through `.54` this was
+  recorded as inheritance, on the theory that `.dd-menu` wrapped the trigger; `.55` mapped
+  Skilljar's real markup and that theory is **refuted** — `.sb-link` and `.dd-menu` are
+  SIBLINGS under `.has-dd`, so hiding the menu cannot disable the trigger by inheritance.
+  The prohibition is empirical and still absolute: three hiding properties, three identical
+  dead-button reports. A disproved mechanism is not permission to try again.
   The accepted cost is that a second tap may not close the menu: Android's `:hover` sticks
   to the last-tapped element, so the site's own hover rule keeps matching. Live with it.
   `@media (hover: none), (pointer: coarse)` does not rescue this either (`.43`, `.45`) — a
   WebView reporting `hover: hover` makes the block inert.
+- **Skilljar's Get Started markup, mapped: `.has-dd > (.sb-link, .dd-menu)` as SIBLINGS —
+  and Search is outside BOTH.** Do not guess this structure again; `.40`-`.54` all reasoned
+  about it from behaviour and two of those inferences were wrong. The practical rule: any
+  guard written as `t.closest('.dd-menu')` or `t.closest('.has-dd')` is **false for a tap on
+  Search**, so it can never clear state on the path that matters. `.54` shipped exactly that
+  mistake.
+- **A handler that fires for one control and not another is an event-DELIVERY bug, not a
+  logic bug.** `bcHandleDdTouch` opens the menu (so it is registered and firing) yet its
+  close-all never runs for a Search tap. Do not rewrite the logic in that situation — the
+  logic is provably reached elsewhere. Look at the path: something stopping propagation
+  above `document`, or a target detached between `touchstart` and `touchend`, whose
+  propagation path contains neither `document` nor `window` and which **no** capture-phase
+  listener can rescue. `.55` covers both with one listener each.
 - **When a control regresses across builds, `git diff` the last version that worked before
   reasoning about mechanisms.** `.46`-`.48` produced three plausible-sounding theories
   (display/hit-testing, sticky hover, a neutered `preventDefault`) and three failed fixes.

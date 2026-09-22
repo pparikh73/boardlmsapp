@@ -37,6 +37,49 @@ const ACADEMY_INJECT_BEFORE = `
                 }
               } catch (e) {}
 
+              // 2.116621.55 - window-capture backstop for the Get Started dropdown.
+              //
+              // The document-capture handler in the main script receives taps on
+              // .has-dd (the menu opens - confirmed on device) but NOT taps on
+              // Skilljar's Search control. Search sits OUTSIDE .has-dd and outside
+              // .dd-menu (confirmed against Skilljar's real markup), so the close-all
+              // at the top of bcHandleDdTouch is already the correct behaviour for it
+              // - it simply never runs, because the event never reaches document.
+              // Either something stops propagation on window capture, or the control
+              // is re-rendered between touchstart and touchend, in which case the
+              // detached target's path contains neither document nor window.
+              //
+              // window capture is the earliest point in the propagation path, and
+              // this script runs before any of the site's own scripts, so this
+              // listener is registered FIRST. A later stopImmediatePropagation on
+              // window cannot skip it, and plain stopPropagation never affects
+              // another listener on the same node.
+              //
+              // It only ever CLEARS, and only for targets outside .has-dd, so it
+              // cannot interfere with the toggle in the main script: window capture
+              // runs before document capture, so a tap on the trigger clears first
+              // and bcHandleDdTouch then opens. No hit-test risk either - the tapped
+              // control is outside .has-dd, so hiding the menu cannot retarget it.
+              //
+              // Top frame only, and the check is hoisted out of the callback so no
+              // listener is registered in subframes at all: this script is injected
+              // into EVERY frame (injectedJavaScriptBeforeContentLoadedForMainFrameOnly
+              // is false) and the nav exists only in the top document.
+              try {
+                if (window === window.top) {
+                  window.addEventListener('touchend', function (e) {
+                    try {
+                      var t = e.target;
+                      if (!t || typeof t.closest !== 'function') return;
+                      if (t.closest('.has-dd')) return;
+                      document.querySelectorAll('.has-dd.touch-open').forEach(function (el) {
+                        el.classList.remove('touch-open');
+                      });
+                    } catch (err) {}
+                  }, true);
+                }
+              } catch (e) {}
+
               // mediaPlaybackRequiresUserAction is false so lesson video players can call
               // .play() asynchronously after a tap — block any .play() call before the
               // user's first touch so this doesn't reintroduce autoplay on page load.
@@ -323,6 +366,36 @@ const ACADEMY_INJECT_MAIN = `
 
                 document.addEventListener('touchend', bcHandleDdTouch, true);
                 document.addEventListener('click', bcHandleDdClick, true);
+
+                // 2.116621.55 - clear an open dropdown when a text field takes focus.
+                //
+                // Skilljar's Search opens an IN-PAGE overlay, so none of the
+                // navigation clears fire for it: pushState/replaceState, popstate,
+                // pagehide and the onNavigationStateChange clear all require a
+                // navigation. The .54 clear in bcHandleDdClick does not fire either -
+                // it is guarded on a .dd-menu target, and Search sits outside both
+                // .dd-menu and .has-dd, so that branch was never reachable for this
+                // tap. That is why .54 did not fix it.
+                //
+                // focusin is a different event class from touch and click, so
+                // whatever swallows those on the way to document does not affect it,
+                // and it bubbles (focus does not), so a plain document listener is
+                // enough. It also covers the case where the control is re-rendered
+                // between touchstart and touchend, because focus is dispatched on the
+                // newly attached input.
+                //
+                // Read-only observation: no CSS, no mutation observer, and neither
+                // dropdown handler is touched.
+                document.addEventListener('focusin', function (e) {
+                  try {
+                    var t = e.target;
+                    if (!t) return;
+                    if (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA') return;
+                    document.querySelectorAll('.has-dd.touch-open').forEach(function (el) {
+                      el.classList.remove('touch-open');
+                    });
+                  } catch (err) {}
+                }, false);
 
                 // 2.116621.46 — clear any open dropdown across SPA navigation.
                 //
