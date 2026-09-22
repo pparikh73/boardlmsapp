@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.56`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.57`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -1020,6 +1020,59 @@ toggles its visibility, `addedNodes` is empty and there is nothing to observe. C
 would need `attributes: true` on this observer — back onto the freeze path — so do not reach
 for it without measuring first. **Untested on device.**
 
+Version `2.116621.57` restores a mechanism that build `2.116621.40` had and every build
+since `.41` has lacked. **One branch body in `bcHandleDdClick`; six lines of code.**
+
+**Found by git archaeology, not by reasoning about mechanisms.** `.40` (`41f3fb1`) had a
+**single** handler, `bcHandleDd`, bound to **both** `touchend` and `click`:
+
+    document.addEventListener('touchend', function (e) { bcHandleDd(e, true);  }, true);
+    document.addEventListener('click',    function (e) { bcHandleDd(e, false); }, true);
+
+Its outside-tap close-all therefore ran on **either** event. `.41` (`f545add`) split it into
+`bcHandleDdTouch` and `bcHandleDdClick` to stop `click` re-adding the class on a second tap —
+and dropped the close-all from the click path along with the toggle. **Only the toggle needed
+to go: a close-all is not a toggle.** From `.41` to `.56` there was one clear path where `.40`
+had two, and the one that survived is the one that provably fails here — `touchend` never
+reaches us for a tap on Skilljar's Search control, established in `.55` at `document` capture
+**and** at `window` capture. `click` is a different event with different dispatch conditions
+and had not been tried on this path since `.40`.
+
+Verified across all 16 commits that touched the file after `.40`: the close-all block occurs
+exactly **once** in every revision from `.41` onward, and only `f545add` ever altered the
+outside-tap branch.
+
+**Why it cannot regress anything, by selector reachability rather than by testing:**
+
+- The branch is reachable **only** when `t.closest('.has-dd')` is null. The trigger is
+  `.has-dd > .sb-link`, so a tap on it always matches and **never reaches this branch**. The
+  open/close toggle is untouched.
+- It only ever **removes** the class. The `.41` second-tap bug was `click` *re-adding* it;
+  that is structurally impossible here.
+- It touches no event — no `preventDefault`, no `stopPropagation` — so the tapped control
+  behaves exactly as it would if this script had never run, and Search still opens.
+- It is idempotent with the `touchend` close-all: both remove the same class.
+
+`bcHandleDdTouch` is **byte-identical** to `.56`, as are `bcDdCloseAll`, `bcSchedule`,
+`bcScheduleMarkInline` and `bcScheduleVideoFix`, the `.56` observer block, and both `.55`
+listeners. The dropdown CSS is still the single open rule.
+
+**The learning-paths suppression is now INERT DEAD CODE — do not assume it is load-bearing.**
+Both handlers test
+`(a.getAttribute('href') || '').indexOf('learning-paths') !== -1` before calling
+`preventDefault()`/`stopPropagation()`. Skilljar's own HTML now sets that trigger's `href` to
+`#`, so the test is always false and neither suppression block ever fires. That is **correct,
+not a defect**: there is no longer a navigation to suppress, and per the `.48` rule a handler
+must never suppress behaviour it cannot replace. The menu still opens, because the toggle sits
+below the suppression and does not depend on it. **Our JS only ever READS `href` — it never
+writes one** (every `setAttribute` in the file targets `playsinline`, a referrer `meta`, or an
+iframe `allow`), so nothing here can undo the Skilljar-side fix. Left in place deliberately: if
+the `href` is ever restored to a real URL, the suppression becomes live again on its own.
+
+**Untested on device.** `.56`'s observer is complementary, not redundant — the two cover
+different triggers (overlay insertion vs. the click that opens it) and neither is guaranteed
+alone.
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -1194,6 +1247,12 @@ been started yet.
   during the expensive scenario and gate on it; do not rely on the scan being "small".
   `node.querySelector` on an added node walks that node's subtree only, which is fine; a
   full-document query in the same place is not.
+- **When one of two redundant paths is removed as collateral, the survivor may be the one
+  that fails.** `.41` split a handler bound to BOTH `touchend` and `click` in order to stop
+  `click` toggling a class, and took the outside-tap close-all with it. The toggle was the
+  bug; the close-all was not, and it had been the second of two independent clear paths.
+  Fifteen builds then chased the resulting gap. When splitting a handler that serves two
+  events, list what each branch does and ask which of them genuinely needed to differ.
 - **A free device observation beats another build.** `.46`-`.55` spent ten builds inferring
   mechanism from one binary symptom, and `.49`, `.52`, `.53`, `.54` and `.55` each corrected
   an earlier confident diagnosis. The question "does typing in the search field dismiss the

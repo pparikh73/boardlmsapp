@@ -353,7 +353,32 @@ const ACADEMY_INJECT_MAIN = `
                     return;
                   }
                   var ddc = t.closest('.has-dd');
-                  if (!ddc) return;
+                  if (!ddc) {
+                    // 2.116621.57 - restored from 2.116621.40 (41f3fb1).
+                    //
+                    // .40 had ONE handler bound to both touchend and click, so a tap on
+                    // any target outside .has-dd cleared touch-open on EITHER event.
+                    // .41 (f545add) split the handler in two to stop click re-adding the
+                    // class on a second tap, and dropped the close-all from the click
+                    // path along with it. Only the toggle needed to go: a close-all is
+                    // not a toggle. Every build from .41 to .56 has had one clear path
+                    // instead of two, and the one it kept is the one that fails here -
+                    // touchend never reaches us for a tap on Skilljar's Search control,
+                    // proven in .55 at document capture AND at window capture. click is
+                    // a different event with different dispatch conditions and has never
+                    // been tried on this path since .40.
+                    //
+                    // Reachable only when the target has no .has-dd ancestor, so the
+                    // trigger (.has-dd > .sb-link) can never reach it and the open/close
+                    // toggle is untouched. It only removes, never adds, so the .41
+                    // second-tap regression is structurally impossible. It touches no
+                    // event, so the tapped control behaves exactly as it would without
+                    // this script.
+                    document.querySelectorAll('.has-dd.touch-open').forEach(function (el) {
+                      el.classList.remove('touch-open');
+                    });
+                    return;
+                  }
                   // Same rule as the touch handler: if there is no menu to open, this
                   // click is the control's real behaviour and must not be swallowed.
                   if (!ddc.querySelector('.dd-menu')) return;
