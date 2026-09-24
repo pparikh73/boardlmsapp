@@ -37,49 +37,6 @@ const ACADEMY_INJECT_BEFORE = `
                 }
               } catch (e) {}
 
-              // 2.116621.55 - window-capture backstop for the Get Started dropdown.
-              //
-              // The document-capture handler in the main script receives taps on
-              // .has-dd (the menu opens - confirmed on device) but NOT taps on
-              // Skilljar's Search control. Search sits OUTSIDE .has-dd and outside
-              // .dd-menu (confirmed against Skilljar's real markup), so the close-all
-              // at the top of bcHandleDdTouch is already the correct behaviour for it
-              // - it simply never runs, because the event never reaches document.
-              // Either something stops propagation on window capture, or the control
-              // is re-rendered between touchstart and touchend, in which case the
-              // detached target's path contains neither document nor window.
-              //
-              // window capture is the earliest point in the propagation path, and
-              // this script runs before any of the site's own scripts, so this
-              // listener is registered FIRST. A later stopImmediatePropagation on
-              // window cannot skip it, and plain stopPropagation never affects
-              // another listener on the same node.
-              //
-              // It only ever CLEARS, and only for targets outside .has-dd, so it
-              // cannot interfere with the toggle in the main script: window capture
-              // runs before document capture, so a tap on the trigger clears first
-              // and bcHandleDdTouch then opens. No hit-test risk either - the tapped
-              // control is outside .has-dd, so hiding the menu cannot retarget it.
-              //
-              // Top frame only, and the check is hoisted out of the callback so no
-              // listener is registered in subframes at all: this script is injected
-              // into EVERY frame (injectedJavaScriptBeforeContentLoadedForMainFrameOnly
-              // is false) and the nav exists only in the top document.
-              try {
-                if (window === window.top) {
-                  window.addEventListener('touchend', function (e) {
-                    try {
-                      var t = e.target;
-                      if (!t || typeof t.closest !== 'function') return;
-                      if (t.closest('.has-dd')) return;
-                      document.querySelectorAll('.has-dd.touch-open').forEach(function (el) {
-                        el.classList.remove('touch-open');
-                      });
-                    } catch (err) {}
-                  }, true);
-                }
-              } catch (e) {}
-
               // mediaPlaybackRequiresUserAction is false so lesson video players can call
               // .play() asynchronously after a tap — block any .play() call before the
               // user's first touch so this doesn't reintroduce autoplay on page load.
@@ -200,286 +157,45 @@ const ACADEMY_INJECT_MAIN = `
               } catch (e) {}
 
               try {
-                // "Get Started" dropdown on touch. Skilljar reveals .dd-menu on
-                // :hover, which a touch device never produces — the tap instead
-                // follows the trigger's href straight to learning-paths, so the menu
-                // is unreachable on mobile. Mirror the hover state with a class the
-                // handler below toggles.
+                // 2.116621.59 - the ONLY dropdown code left in this app.
                 //
-                // 2.116621.49 — RESTORED to the 2.116621.41 rule, which is the last
-                // state confirmed working on device (menu opened on first tap, closed
-                // on an outside tap).
+                // Skilljar's Header HTML block now carries a complete page-level
+                // dropdown script that manages touch-open on every touch device,
+                // browser and WebView alike. Ours used to do the same job, and from
+                // the moment theirs shipped the two were binding touchend on the same
+                // element and toggling the same class: one tap, two toggles, net zero,
+                // so the class was never set when the frame painted and the dropdown
+                // could not open at all. Deterministic, not a race. Everything we had
+                // - bcDdCloseAll, bcHandleDdTouch, bcHandleDdClick, both capture-phase
+                // registrations, the .55 focusin and window-capture listeners, the
+                // history hooks, the .56 observer branch and the .50 navigation clear -
+                // is deleted in this build. Do not reintroduce any of it while the page
+                // script is live.
                 //
-                // THERE IS DELIBERATELY NO CLOSED-STATE RULE. That is the whole fix.
-                // .41 only ever forced the menu OPEN; the site's own CSS did all the
-                // hiding. .43 added a closed-state rule, .46 made it
-                // display: none !important, .47 and .48 made it
-                // opacity/visibility/pointer-events — and from .46 on the Get Started
-                // control was completely unresponsive on device.
+                // What stays is this one rule, and it is a safety net rather than a
+                // duplicate. Skilljar's own neutraliser is inside @media (hover: none),
+                // and an Android WebView can report hover: hover - a stylus, a paired
+                // mouse, or simply a WebView that misreports - which makes their block
+                // inert. Ours is unconditional, so sticky :hover can never hold the menu
+                // open in the app whatever the media query says.
                 //
-                // Why a closed-state rule on .dd-menu kills the TRIGGER: visibility
-                // and pointer-events both INHERIT to descendants. If Skilljar's
-                // .dd-menu is a wrapper that contains the trigger rather than a sibling
-                // of it, hiding .dd-menu hides and disables the trigger with it. That
-                // fits every observation: three different hiding properties, three
-                // identical dead-button reports, and a handler that is byte-identical
-                // to the version that worked.
+                // Deliberately NO .has-dd.touch-open rule here any more: the page's own
+                // CSS owns the open state now, and one source of truth is the point.
+                // This rule targets :hover and :focus-within only, a different selector
+                // from .touch-open, so the two never compete.
                 //
-                // So do not add a closed-state rule here again. The known cost is that
-                // a second tap may not close the menu (Android's sticky :hover keeps
-                // the site's own hover rule matching) — that is the .41 behaviour, it
-                // is a far smaller problem than an unusable control, and it must not be
-                // "fixed" by hiding .dd-menu from a stylesheet. An inline style on the
-                // menu element is NOT a safe alternative either: it inherits exactly
-                // the same way.
+                // NEVER put an html prefix on these selectors. See the .58 entry in
+                // CLAUDE.md: it makes them (0,3,1) against a (0,3,0) open rule and the
+                // menu can never be revealed.
                 var ddStyle = document.createElement('style');
                 ddStyle.textContent =
-                  // 2.116621.58 - neutralise Skilljar's OWN hover/focus reveal.
-                  //
-                  // Every clear from .54 to .57 removed touch-open, and the menu stayed
-                  // visible anyway, because the site's own rule keeps matching:
-                  //
-                  //   .has-dd:hover .dd-menu, .has-dd:focus-within .dd-menu { opacity: 1 }
-                  //
-                  // On Android :hover sticks to the last-tapped element, and .sb-link is
-                  // an anchor so it also holds focus - so both halves of that rule stay
-                  // matched after the tap and the class was never what held the menu open.
-                  //
-                  // NO html PREFIX ON THESE SELECTORS. That is load-bearing, not style.
-                  // html .has-dd:hover .dd-menu is (0,3,1); the touch-open rule below is
-                  // (0,3,0). Equal class counts, so the element count decides and the
-                  // neutraliser would outrank touch-open no matter what order they are in
-                  // or that both carry !important - importance is compared first, then
-                  // specificity, and only then source order. Verified in Blink: with the
-                  // html prefix and focus on the trigger, the menu computes
-                  // visibility:hidden WITH touch-open set - a dead button, exactly the
-                  // .46-.48 symptom. Without the prefix both are (0,3,0), source order
-                  // decides, and touch-open wins.
-                  //
-                  // Order in this stylesheet is therefore: neutralise, THEN touch-open.
-                  // Do not reorder, and do not add a prefix to either selector.
                   '.has-dd:hover .dd-menu,' +
                   '.has-dd:focus-within .dd-menu {' +
                   '  opacity: 0 !important;' +
                   '  visibility: hidden !important;' +
                   '  pointer-events: none !important;' +
-                  '}' +
-                  '.has-dd.touch-open .dd-menu {' +
-                  '  opacity: 1 !important;' +
-                  '  visibility: visible !important;' +
-                  '  transform: translateY(0) !important;' +
-                  '  pointer-events: auto !important;' +
                   '}';
                 document.head.appendChild(ddStyle);
-
-                // Delegated on document so it survives the site re-rendering its nav,
-                // and in the CAPTURE phase so the href is prevented before Skilljar's
-                // own handler sees the event.
-                //
-                // 2.116621.41: touchend is now the ONLY thing that toggles. .40 toggled
-                // on touchend AND on click, with a 600ms guard meant to swallow the
-                // click that follows a tap; on Android that guard did not hold, so a
-                // second tap removed touch-open on touchend and the click put it
-                // straight back — the menu looked like it would not close. touchend is
-                // sufficient on mobile, so click no longer participates in the toggle
-                // at all and there is no timing window left to get wrong.
-                function bcDdCloseAll(except) {
-                  var open = document.querySelectorAll('.has-dd.touch-open');
-                  for (var i = 0; i < open.length; i++) {
-                    if (open[i] !== except) open[i].classList.remove('touch-open');
-                  }
-                }
-
-                function bcHandleDdTouch(e) {
-                  var t = e.target;
-                  if (!t || typeof t.closest !== 'function') return;
-
-                  var dd = t.closest('.has-dd');
-                  if (!dd) {
-                    // Tap outside any dropdown closes whatever is open.
-                    bcDdCloseAll(null);
-                    return;
-                  }
-
-                  // A tap INSIDE the revealed menu is a real link. Return before both
-                  // the preventDefault and the toggle, so menu links stay clickable and
-                  // the menu does not close under the finger mid-tap.
-                  //
-                  // touch-open is deliberately NOT cleared here. Doing so on touchend
-                  // hides the menu before the activating click is dispatched, and if
-                  // Blink re-hit-tests at click time it can find nothing — which would
-                  // kill the very link the user tapped. The clear lives in
-                  // bcHandleDdClick instead; see the note there.
-                  if (t.closest('.dd-menu')) return;
-
-                  // 2.116621.48 — THIS IS THE FIX FOR THE DEAD BUTTON.
-                  //
-                  // The trigger was never dead to touch. It was NEUTERED: this handler
-                  // is registered on document in the CAPTURE phase, so it runs before
-                  // the event reaches the target, and it called preventDefault() plus
-                  // stopPropagation() UNCONDITIONALLY on any trigger whose href contains
-                  // learning-paths. That destroys the control's only native behaviour —
-                  // navigating — and substitutes ours, which produces a visible result
-                  // only if a menu element actually exists inside this .has-dd and our
-                  // CSS matches it. When it does not, the tap does nothing whatsoever,
-                  // which is exactly the "completely unresponsive" report. It also
-                  // explains why this broke in EVERY build that touched the dropdown
-                  // CSS: each one kept this unconditional suppression while its own CSS
-                  // variant failed to reveal the menu for a different reason.
-                  //
-                  // So: find the menu FIRST, and if there is nothing to open, return
-                  // before touching the event at all. The worst case is now that the
-                  // button behaves exactly as it would if this script had never run.
-                  // It can no longer be made less functional than untouched.
-                  var menu = dd.querySelector('.dd-menu');
-                  if (!menu) return;
-
-                  // Only now, with a menu we can actually show, suppress the trigger's
-                  // navigation: opening the menu is the whole point of the tap.
-                  var a = t.closest('a');
-                  if (a && (a.getAttribute('href') || '').indexOf('learning-paths') !== -1) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }
-
-                  // Explicit open/close rather than classList.toggle, so the state after
-                  // a tap never depends on what the site may have done to the class in
-                  // between — a stray toggle can otherwise leave open and shut inverted.
-                  if (dd.classList.contains('touch-open')) {
-                    dd.classList.remove('touch-open');
-                  } else {
-                    bcDdCloseAll(dd);
-                    dd.classList.add('touch-open');
-                  }
-                }
-
-                // Click NEVER toggles. It exists only to suppress the trigger's
-                // navigation in case the browser still dispatches a click after the
-                // touchend above (preventDefault there normally cancels it, but not
-                // dependably across Android WebView versions).
-                function bcHandleDdClick(e) {
-                  var t = e.target;
-                  if (!t || typeof t.closest !== 'function') return;
-                  // Menu links must stay clickable — check this before anything else.
-                  //
-                  // 2.116621.54 — clear touch-open on the way out, and do it HERE rather
-                  // than in the touchend handler.
-                  //
-                  // Why it must be cleared at all: Skilljar's Search opens an IN-PAGE
-                  // overlay, not a new document. No navigation means none of the clears
-                  // fire — not the pushState/replaceState hooks, not popstate, not
-                  // pagehide, not the .50 navigation clear — so the class stayed set and
-                  // the menu rendered over the overlay until the user navigated away for
-                  // real. That is the permanent overlay that was reported.
-                  //
-                  // Why here and not on touchend: touchend fires BEFORE the activating
-                  // click, so hiding the menu there can leave Blink re-hit-testing at
-                  // click time and finding nothing — killing the link that was tapped,
-                  // Search included. By the time a click is dispatched its target is
-                  // already resolved, so hiding the menu now cannot retarget it.
-                  if (t.closest('.dd-menu')) {
-                    var hasDd = t.closest('.has-dd');
-                    if (hasDd) hasDd.classList.remove('touch-open');
-                    return;
-                  }
-                  var ddc = t.closest('.has-dd');
-                  if (!ddc) {
-                    // 2.116621.57 - restored from 2.116621.40 (41f3fb1).
-                    //
-                    // .40 had ONE handler bound to both touchend and click, so a tap on
-                    // any target outside .has-dd cleared touch-open on EITHER event.
-                    // .41 (f545add) split the handler in two to stop click re-adding the
-                    // class on a second tap, and dropped the close-all from the click
-                    // path along with it. Only the toggle needed to go: a close-all is
-                    // not a toggle. Every build from .41 to .56 has had one clear path
-                    // instead of two, and the one it kept is the one that fails here -
-                    // touchend never reaches us for a tap on Skilljar's Search control,
-                    // proven in .55 at document capture AND at window capture. click is
-                    // a different event with different dispatch conditions and has never
-                    // been tried on this path since .40.
-                    //
-                    // Reachable only when the target has no .has-dd ancestor, so the
-                    // trigger (.has-dd > .sb-link) can never reach it and the open/close
-                    // toggle is untouched. It only removes, never adds, so the .41
-                    // second-tap regression is structurally impossible. It touches no
-                    // event, so the tapped control behaves exactly as it would without
-                    // this script.
-                    document.querySelectorAll('.has-dd.touch-open').forEach(function (el) {
-                      el.classList.remove('touch-open');
-                    });
-                    return;
-                  }
-                  // Same rule as the touch handler: if there is no menu to open, this
-                  // click is the control's real behaviour and must not be swallowed.
-                  if (!ddc.querySelector('.dd-menu')) return;
-                  var a = t.closest('a');
-                  if (a && (a.getAttribute('href') || '').indexOf('learning-paths') !== -1) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }
-                }
-
-                document.addEventListener('touchend', bcHandleDdTouch, true);
-                document.addEventListener('click', bcHandleDdClick, true);
-
-                // 2.116621.55 - clear an open dropdown when a text field takes focus.
-                //
-                // Skilljar's Search opens an IN-PAGE overlay, so none of the
-                // navigation clears fire for it: pushState/replaceState, popstate,
-                // pagehide and the onNavigationStateChange clear all require a
-                // navigation. The .54 clear in bcHandleDdClick does not fire either -
-                // it is guarded on a .dd-menu target, and Search sits outside both
-                // .dd-menu and .has-dd, so that branch was never reachable for this
-                // tap. That is why .54 did not fix it.
-                //
-                // focusin is a different event class from touch and click, so
-                // whatever swallows those on the way to document does not affect it,
-                // and it bubbles (focus does not), so a plain document listener is
-                // enough. It also covers the case where the control is re-rendered
-                // between touchstart and touchend, because focus is dispatched on the
-                // newly attached input.
-                //
-                // Read-only observation: no CSS, no mutation observer, and neither
-                // dropdown handler is touched.
-                document.addEventListener('focusin', function (e) {
-                  try {
-                    var t = e.target;
-                    if (!t) return;
-                    if (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA') return;
-                    document.querySelectorAll('.has-dd.touch-open').forEach(function (el) {
-                      el.classList.remove('touch-open');
-                    });
-                  } catch (err) {}
-                }, false);
-
-                // 2.116621.46 — clear any open dropdown across SPA navigation.
-                //
-                // Skilljar routes some navigation through history.pushState rather than
-                // a document load, so the .has-dd element survives and keeps its
-                // touch-open class. Tapping Search from an open Get Started menu left
-                // the menu rendered over the next page. Nothing cleared it: the only
-                // reset paths were a tap outside and a full page load.
-                //
-                // pushState/replaceState are wrapped rather than polled, so the clear
-                // happens in the same task as the navigation. popstate covers Back, and
-                // pagehide covers a real document unload.
-                function bcClearDropdowns() { bcDdCloseAll(null); }
-                try {
-                  var bcPushState = history.pushState;
-                  var bcReplaceState = history.replaceState;
-                  history.pushState = function () {
-                    var r = bcPushState.apply(this, arguments);
-                    bcClearDropdowns();
-                    return r;
-                  };
-                  history.replaceState = function () {
-                    var r = bcReplaceState.apply(this, arguments);
-                    bcClearDropdowns();
-                    return r;
-                  };
-                } catch (e) {}
-                window.addEventListener('popstate', bcClearDropdowns);
-                window.addEventListener('pagehide', bcClearDropdowns);
               } catch (e) {}
 
               try {
@@ -760,55 +476,7 @@ const ACADEMY_INJECT_MAIN = `
                 bcTasks.push(padForFixedHeader);
                 padForFixedHeader();
                 window.addEventListener('scroll', bcSchedule, { passive: true });
-                // 2.116621.56 - clear the Get Started dropdown when Skilljar's Search
-                // overlay is INSERTED, not when its field is focused.
-                //
-                // Skilljar's Search opens an in-page overlay and does NOT autofocus its
-                // input, so the .55 focusin listener was right in mechanism but fired
-                // too late - only once the user tapped the field by hand. Device test
-                // confirmed both halves: typing in the field DID dismiss the menu, so
-                // touch-open is the cause; and it stayed up until then, so the trigger
-                // has to be DOM insertion.
-                //
-                // No new observer and no new rAF loop: this wraps the callback that was
-                // already registered here. Counts stay at three observers, three rAF
-                // loops.
-                //
-                // THE LATCH IS WHAT KEEPS THE SEARCH FREEZE FIXED. When no dropdown is
-                // open - which is every keystroke of search autocomplete, the case that
-                // froze the app - the callback does one selector match and calls
-                // bcSchedule exactly as before. The subtree scan can only run while the
-                // menu is actually open, and typing in search cannot overlap with that.
-                //
-                // Scanning addedNodes only, and node.querySelector walks that node's own
-                // subtree - never the document. Selector is semantic attributes only, so
-                // no Skilljar build hash can silently stop it matching.
-                //
-                // The clear is INLINE and deliberately not routed through bcSchedule:
-                // that path is gated on bcIsEditing() and would defer to the focusout
-                // catch-up, which is exactly the too-late behaviour being fixed.
-                new MutationObserver(function (records) {
-                  try {
-                    if (!document.querySelector('.has-dd.touch-open')) { bcSchedule(); return; }
-                    var SEL = 'input[type="search"], input[type="text"], input:not([type]), [role="search"], [role="dialog"], [aria-modal="true"]';
-                    var cleared = false;
-                    for (var i = 0; i < records.length && !cleared; i++) {
-                      var added = records[i].addedNodes;
-                      for (var j = 0; j < added.length; j++) {
-                        var node = added[j];
-                        if (!node || node.nodeType !== 1) continue;
-                        if ((node.matches && node.matches(SEL)) || node.querySelector(SEL)) {
-                          document.querySelectorAll('.has-dd.touch-open').forEach(function (el) {
-                            el.classList.remove('touch-open');
-                          });
-                          cleared = true;
-                          break;
-                        }
-                      }
-                    }
-                  } catch (e) {}
-                  bcSchedule();
-                }).observe(document.body, { childList: true, subtree: true });
+                new MutationObserver(bcSchedule).observe(document.body, { childList: true, subtree: true });
                 var bcPollCount = 0;
                 var bcPollTimer = setInterval(function() {
                   bcSchedule();
@@ -1107,56 +775,18 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
     // navigation produces (loading true, then false) are only acted on once.
     const lastBouncedRef = useRef<string | null>(null);
 
-    // 2.116621.50 — last URL we have cleared dropdowns for. Distinct from
-    // lastBouncedRef, which only tracks OFF-DOMAIN urls and is reset to null on every
-    // allowed one, so it cannot double as a previous-URL tracker.
-    const lastUrlRef = useRef<string | null>(null);
 
     function handleNavigationChange(nav: WebViewNavigation) {
       if (nav.url.includes('/auth/logout') || (nav.url.includes('/auth/domain') && nav.url.includes('/login'))) {
         onLogout?.();
       }
 
-      // 2.116621.48 — the dropdown-clearing injectJavaScript that .46 put here is
-      // GONE, and that is the Back-button latency fix.
-      //
-      // It ran unconditionally on EVERY navigation state change, before any early
-      // return. This callback fires more than once per navigation (see lastBouncedRef
-      // above: loading true, then false), and each injectJavaScript is a bridge call
-      // that becomes an evaluateJavascript on the Android UI thread — so every
-      // navigation, Back included, carried two or more extra round trips for work
-      // that was already done.
-      //
-      // It was also redundant. The injected hooks cover every navigation form there
-      // is: pushState and replaceState are wrapped, popstate covers Back, pagehide
-      // covers unload — and a real document load re-injects the scripts from scratch,
-      // so touch-open cannot survive one anyway. Nothing is lost by deleting this.
-
-      // 2.116621.50 — clear any stale open dropdown ONCE per completed navigation.
-      //
-      // This is deliberately not the .46 version. That one fired on EVERY state change
-      // including loading === true, which is two or more evaluateJavascript round trips
-      // per navigation on the Android UI thread and is what made Back feel slow. This
-      // fires on the loading === false edge only, and only when the URL actually
-      // changed, so it costs at most ONE bridge call per navigation and none at all
-      // when a navigation re-reports the same URL.
-      //
-      // Placed above the Android early-return below: the dropdown is a touch
-      // affordance on both platforms, so this must not sit inside that block.
-      //
-      // Scope note for whoever reads this next: on a genuine full document load the
-      // scripts are re-injected into a fresh DOM that never had touch-open, so this
-      // call is a no-op there. It earns its place on the paths where the document is
-      // reused — a pushState route that the in-page hooks somehow miss, or a
-      // same-document navigation — and as a cheap backstop that cannot regress the
-      // Back-button latency the way the unconditional version did.
-      if (nav.loading === false && nav.url !== lastUrlRef.current) {
-        lastUrlRef.current = nav.url;
-        webViewRef.current?.injectJavaScript(
-          "document.querySelectorAll('.has-dd.touch-open').forEach(function(el){el.classList.remove('touch-open');}); true;"
-        );
-      }
-
+      // 2.116621.59 — there is deliberately NO dropdown clear on the navigation path.
+      // .46 put an unconditional injectJavaScript here and that was the Back-button
+      // latency bug; .50 replaced it with a gated one; .59 removed it entirely when the
+      // page-level script took over the dropdown. Never put an injectJavaScript on this
+      // callback: it fires more than once per navigation and each one is an
+      // evaluateJavascript round trip on the Android UI thread.
       // ANDROID allowlist enforcement lives here, not in onShouldStartLoadWithRequest.
       // That callback BLOCKS the Android WebView thread for up to 250ms per navigation
       // (RNCWebViewClient.shouldOverrideUrlLoading waits on a lock) and carries no

@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.58`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.59`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -1129,6 +1129,65 @@ reveal was the symptom in all four - and that proof is the Blink table above.
 `bcScheduleVideoFix` and the `.56` observer block are all **byte-identical** to `.57`.
 **Untested on device.**
 
+Version `2.116621.59` **deletes almost all of the app's dropdown code.** This is a removal,
+not a fix: `-404 / +34` lines. It is the largest single change in this sequence and the
+easiest to justify.
+
+**What changed in the world.** Board's Header HTML block now carries a complete page-level
+dropdown script - written and reviewed here, verified working in Chrome on the same Android
+device. It manages `touch-open` for every touch user, browser and WebView alike.
+
+**Why ours became harmful the moment theirs shipped.** Both scripts bound `touchend` and both
+toggled `touch-open`. **One tap, two toggles, net zero** - the class was never set when the
+frame painted, so the dropdown could not open at all. Deterministic, not a race, and
+independent of which handler ran first. It is the `.40` bug (two toggles on one gesture)
+reappearing across two scripts instead of two events.
+
+**Removed in full:**
+
+- the whole dropdown `try` block in `ACADEMY_INJECT_MAIN` - `bcDdCloseAll`,
+  `bcHandleDdTouch`, `bcHandleDdClick`, both capture-phase registrations, the `.55` `focusin`
+  listener, `bcClearDropdowns` and the `pushState`/`replaceState`/`popstate`/`pagehide` hooks;
+- the `.55` window-capture `touchend` listener in `ACADEMY_INJECT_BEFORE`;
+- the `.56` observer overlay branch - the registration is back to
+  `new MutationObserver(bcSchedule).observe(...)`, the pre-`.56` form, which is **cheaper**
+  than what it replaces, so the search-freeze fix is unaffected;
+- the `.50` navigation clear in `handleNavigationChange`, plus `lastUrlRef`, which nothing
+  else used;
+- four orphaned comment blocks describing the deleted code. Leaving those would have been
+  worse than leaving the code.
+
+**Removed atomically on purpose.** Deleting `bcDdCloseAll` while leaving the history hooks
+would throw a `ReferenceError` **inside a wrapper around `history.pushState`**, breaking
+Skilljar's own SPA routing on every navigation. The whole `try` block was the only safe unit.
+
+**Kept, and non-negotiable:**
+
+1. **`fixHeaderOverlap`'s `.dd-menu` guard** - `!kids[j].matches('.dd-menu') &&
+   !kids[j].querySelector('.dd-menu')`. A DOM read, not a dependency on our code. It stops the
+   header pass forcing the dropdown panel to `position: static`. Deleting it reintroduces
+   `.53`'s permanent overlay.
+2. **The `.58` hover neutraliser**, now the only dropdown CSS we inject. Skilljar's own
+   neutraliser sits inside `@media (hover: none)`, and a WebView can report `hover: hover` -
+   a stylus, a paired mouse, or simple misreporting - which makes their block inert. Ours is
+   unconditional, so sticky `:hover` can never hold the menu open in the app.
+3. Our `.has-dd.touch-open` open rule is **gone**: the page's CSS owns the open state now.
+   One source of truth. The neutraliser targets `:hover`/`:focus-within` only, a different
+   selector, so the two never compete.
+
+**The honest caveat.** That neutraliser is unconditional and `!important`, so it overrides the
+page's hover/focus reveal on any device, not just touch. Inside the app that is exactly what
+we want and the page's own script supplies the reveal via `touch-open`. It would be wrong in a
+desktop browser with JS disabled - hover reveal would be dead - but this CSS is injected only
+by the app, which is never that case. **Do not copy this rule into the page's stylesheet.**
+
+**A useful signal that the removal was clean:** `ACADEMY_INJECT_BEFORE` is now **byte-identical
+to `2.116621.54`** (5,987 chars), verified against `2515322`, and `ACADEMY_INJECT_MAIN` drops
+from 53,240 to 35,596 chars. Typecheck is unchanged at 7 errors and both scripts pass
+`node --check`.
+
+**Untested on device.**
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -1266,6 +1325,24 @@ been started yet.
   overflowed every time because the logo's size was an *input* to the layout. Give the image
   `flex: 1` + a relative `width` + `resizeMode="contain"` and let its height fall out of the
   space that is actually left. Applies to any full-bleed art in a height-constrained screen.
+- **The app must NOT manage the Get Started dropdown any more - the page does.** As of `.59`
+  the only dropdown code left in `LMSWebView.tsx` is the hover neutraliser CSS and
+  `fixHeaderOverlap`'s `.dd-menu` guard. Board's Header HTML block owns `touch-open`
+  completely. If anyone adds a `touchend`/`click` handler that touches that class again, it
+  will bind alongside the page's own handler and the two will toggle it twice per tap - net
+  zero, dropdown permanently dead. That is exactly what `.58` shipped and `.59` removed. The
+  same trap applies to ANY class a third-party page already manages: check whether the site
+  now does the job before adding a handler for it.
+- **When deleting a shared helper, delete everything that calls it in the same commit.**
+  `bcDdCloseAll` was called by `bcClearDropdowns`, which ran inside wrappers around
+  `history.pushState` and `replaceState`. Removing the helper alone would have thrown a
+  `ReferenceError` inside a patched `history` method and broken Skilljar's SPA routing on
+  every navigation - far worse than the bug being fixed. Removing the enclosing `try` block
+  whole was the only safe unit.
+- **Delete the comments with the code.** `.59` removed four comment blocks that described
+  handlers no longer present. A stale comment explaining a mechanism that no longer exists is
+  worse than no comment: the next reader trusts it, and this file's comments are the primary
+  record.
 - **The Get Started tile is Board's OWN HTML, not Skilljar's, and not a navbar.** It is
   `.sub-banner.sb-1.has-dd` in the homepage Header HTML block, which Board can edit directly -
   confirmed by Skilljar support. Structure: `.has-dd > .sb-link` (an `<a href="#">` with
