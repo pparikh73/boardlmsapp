@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.57`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.58`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -1073,6 +1073,62 @@ the `href` is ever restored to a real URL, the suppression becomes live again on
 different triggers (overlay insertion vs. the click that opens it) and neither is guaranteed
 alone.
 
+Version `2.116621.58` neutralises **Skilljar's own hover/focus reveal**. Six CSS lines in
+`ddStyle.textContent`; no JS touched.
+
+**This is the first fix in the sequence that does not target `touch-open`, and that is the
+point.** `.54` through `.57` each added another way to remove the class, and the menu stayed
+visible every time, because the site's own rule keeps matching independently:
+
+    .has-dd:hover .dd-menu, .has-dd:focus-within .dd-menu { opacity: 1; visibility: visible }
+
+On Android `:hover` sticks to the last-tapped element, and `.sb-link` is an anchor so it also
+holds **focus** - so after a tap on Get Started *both* halves of that rule stay matched. The
+class was never what held the menu open. Every clear worked; none of them could have helped.
+
+**The markup that made this diagnosable** (Board's own Header HTML block, shared in full and
+confirmed by Skilljar support - it is **not** Skilljar platform markup, and it is **not** a
+navbar: it is `.sub-banner.sb-1` in the homepage hero grid):
+
+    <div class="sub-banner sb-1 has-dd">
+      <a class="sb-link" href="#" onclick="return false;">...</a>
+      <ul class="dd-menu"> <li><a>All Courses</a></li> ... </ul>
+    </div>
+
+**NO `html` PREFIX ON THE NEUTRALISER. That is load-bearing.** The change was specified as
+`html .has-dd:hover .dd-menu`, which is **(0,3,1)**; the existing touch-open rule is
+**(0,3,0)**. Equal class counts, so the element count decides, and the neutraliser outranks
+touch-open no matter the source order or that both carry `!important` - importance is compared
+first, then specificity, and only then order. Verified in Blink before shipping: with the
+prefix and focus on the trigger, the menu computes `visibility: hidden` **with `touch-open`
+set** - a dead button, the exact `.46`-`.48` symptom from a new cause. Without the prefix both
+are `(0,3,0)`, source order decides, touch-open wins.
+
+Verified end to end on the CSS this file actually emits (extracted from source, not retyped),
+6/6 states:
+
+| state | result |
+|---|---|
+| closed, no focus | hidden |
+| closed + sticky focus (site rule must lose) | **hidden** |
+| open + sticky focus - **the real tap** | **visible** |
+| open, no focus | visible |
+| closed again | hidden |
+| closed + sticky focus - **the Search-overlay case** | **hidden** |
+
+**This knowingly overrides the standing prohibition on closed-state rules**, and the reasoning
+is recorded so it is not mistaken for carelessness. Two things changed since `.46`-`.48`: the
+real markup shows `.dd-menu` is a **sibling** `<ul>` of the trigger, not a wrapper, so hiding
+it cannot disable the trigger by inheritance; and `href="#"` plus `onclick="return false;"`
+means the trigger has no navigation left to lose, so the `.48` neutered-trigger mechanism
+cannot fire either. What has **not** changed is that the true cause of those four failures was
+never established. The mitigation is that the reveal is proven still to work - failure to
+reveal was the symptom in all four - and that proof is the Blink table above.
+
+`bcHandleDdTouch`, `bcHandleDdClick`, `bcDdCloseAll`, `bcSchedule`, `bcScheduleMarkInline`,
+`bcScheduleVideoFix` and the `.56` observer block are all **byte-identical** to `.57`.
+**Untested on device.**
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -1210,6 +1266,24 @@ been started yet.
   overflowed every time because the logo's size was an *input* to the layout. Give the image
   `flex: 1` + a relative `width` + `resizeMode="contain"` and let its height fall out of the
   space that is actually left. Applies to any full-bleed art in a height-constrained screen.
+- **The Get Started tile is Board's OWN HTML, not Skilljar's, and not a navbar.** It is
+  `.sub-banner.sb-1.has-dd` in the homepage Header HTML block, which Board can edit directly -
+  confirmed by Skilljar support. Structure: `.has-dd > .sb-link` (an `<a href="#">` with
+  `onclick="return false;"`) and `.has-dd > .dd-menu` (a `<ul>`), as SIBLINGS. Entries before
+  `.55` describe it as Skilljar navbar chrome; they are wrong. A fix can go in the page itself
+  rather than in injected CSS, and that is usually the better option because it reaches mobile
+  web users too.
+- **Removing a class cannot close a menu the SITE's own rule is holding open.** `.54`-`.57`
+  added four separate ways to clear `touch-open` and the menu stayed up every time, because
+  `.has-dd:hover .dd-menu` and `.has-dd:focus-within .dd-menu` kept matching: Android holds
+  `:hover` on the last-tapped element and an anchor trigger also holds focus. Before adding
+  another clear, ask what else can make the thing visible - and prove it by reading
+  `getComputedStyle` after the clear, not by inferring from the symptom.
+- **Specificity is compared BEFORE source order, even between two `!important` rules.** A
+  neutraliser written as `html .has-dd:hover .dd-menu` is (0,3,1) and beats
+  `.has-dd.touch-open .dd-menu` at (0,3,0) whatever the order - equal class counts mean the
+  element count decides. One `html ` token would have shipped a dead button in `.58`. When two
+  rules must be resolved by source order, count their specificity first and make it equal.
 - **NEVER add a closed-state rule for the Get Started dropdown. Only force it OPEN.** This
   cost four builds (`.46`-`.48`), each reported as a completely unresponsive control. The
   working rule, confirmed on device in `.41` and restored in `.49`, is exactly one selector:
@@ -1222,6 +1296,10 @@ been started yet.
   SIBLINGS under `.has-dd`, so hiding the menu cannot disable the trigger by inheritance.
   The prohibition is empirical and still absolute: three hiding properties, three identical
   dead-button reports. A disproved mechanism is not permission to try again.
+  **`.58` knowingly overrode this** for a neutraliser on `.has-dd:hover`/`:focus-within` - a
+  different selector from `.touch-open`, added only because the site's own hover rule was
+  proven to be what held the menu open. It shipped only with the reveal verified still working
+  in Blink across six states. If the dead button returns, THIS is the first thing to revert.
   The accepted cost is that a second tap may not close the menu: Android's `:hover` sticks
   to the last-tapped element, so the site's own hover rule keeps matching. Live with it.
   `@media (hover: none), (pointer: coarse)` does not rescue this either (`.43`, `.45`) — a

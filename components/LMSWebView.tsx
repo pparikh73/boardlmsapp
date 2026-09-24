@@ -234,6 +234,36 @@ const ACADEMY_INJECT_MAIN = `
                 // the same way.
                 var ddStyle = document.createElement('style');
                 ddStyle.textContent =
+                  // 2.116621.58 - neutralise Skilljar's OWN hover/focus reveal.
+                  //
+                  // Every clear from .54 to .57 removed touch-open, and the menu stayed
+                  // visible anyway, because the site's own rule keeps matching:
+                  //
+                  //   .has-dd:hover .dd-menu, .has-dd:focus-within .dd-menu { opacity: 1 }
+                  //
+                  // On Android :hover sticks to the last-tapped element, and .sb-link is
+                  // an anchor so it also holds focus - so both halves of that rule stay
+                  // matched after the tap and the class was never what held the menu open.
+                  //
+                  // NO html PREFIX ON THESE SELECTORS. That is load-bearing, not style.
+                  // html .has-dd:hover .dd-menu is (0,3,1); the touch-open rule below is
+                  // (0,3,0). Equal class counts, so the element count decides and the
+                  // neutraliser would outrank touch-open no matter what order they are in
+                  // or that both carry !important - importance is compared first, then
+                  // specificity, and only then source order. Verified in Blink: with the
+                  // html prefix and focus on the trigger, the menu computes
+                  // visibility:hidden WITH touch-open set - a dead button, exactly the
+                  // .46-.48 symptom. Without the prefix both are (0,3,0), source order
+                  // decides, and touch-open wins.
+                  //
+                  // Order in this stylesheet is therefore: neutralise, THEN touch-open.
+                  // Do not reorder, and do not add a prefix to either selector.
+                  '.has-dd:hover .dd-menu,' +
+                  '.has-dd:focus-within .dd-menu {' +
+                  '  opacity: 0 !important;' +
+                  '  visibility: hidden !important;' +
+                  '  pointer-events: none !important;' +
+                  '}' +
                   '.has-dd.touch-open .dd-menu {' +
                   '  opacity: 1 !important;' +
                   '  visibility: visible !important;' +
