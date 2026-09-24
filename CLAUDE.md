@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.59`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.60`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -1188,6 +1188,48 @@ from 53,240 to 35,596 chars. Typecheck is unchanged at 7 errors and both scripts
 
 **Untested on device.**
 
+Version `2.116621.60` **reverts `.59` in full**: `components/LMSWebView.tsx` is restored
+**byte-identical to `a89c04b` (`2.116621.58`)**, verified by comparing the whole file against
+that commit rather than by re-inserting blocks. `+404 / -34`; 129 code lines back.
+
+**Why.** `.59` deleted the app's dropdown code on the premise that Board's Header HTML block
+carried a working page-level script. **It does not — Skilljar stripped the `<script>` tag.**
+The live block is HTML and CSS only, so `.59` left nothing anywhere managing `touch-open` and
+the dropdown broke in the app *and* in Chrome.
+
+Restored: the whole dropdown `try` block (`bcDdCloseAll`, `bcHandleDdTouch`,
+`bcHandleDdClick`, both capture-phase registrations, the `.55` `focusin` listener,
+`bcClearDropdowns` and the history hooks), the `.55` window-capture listener, the `.56`
+observer branch, `lastUrlRef` and the `.50` navigation clear, and both `ddStyle` rules -
+neutraliser **and** the `touch-open` open rule.
+
+**READ THIS BEFORE THE NEXT BUILD - the `.59` root cause is now in doubt.**
+
+`.59` was justified by a double-toggle: our `touchend` handler and the page's toggling
+`touch-open` on the same tap, net zero, dropdown never opens. That diagnosis **requires the
+page script to have been live** when `.58` was tested. We now know it is not live, and we do
+not know when it was stripped. Two possibilities, and they lead to opposite next steps:
+
+1. **The script was live for the `.58` test and stripped afterwards.** The double-toggle
+   diagnosis stands, `.60` is correct, and the dropdown should work now.
+2. **The script was never live.** Then `.58`'s "dropdown does not open at all" had a
+   different cause - and the most likely candidate is **the hover neutraliser `.58` itself
+   added**, which is a closed-state rule on `.dd-menu`. That is the pattern this file records
+   as never-add after four dead-button builds, and the `.58` entry names it as **the first
+   thing to revert if the dead button returns**. `.60` restores it unchanged.
+
+**So if `.60` still shows a dead Get Started on device, do NOT investigate the handlers.**
+Delete the six-line neutraliser from `ddStyle` - leaving only
+`.has-dd.touch-open .dd-menu` - which returns the injected CSS to `.57`, the last state whose
+CSS matched the `.41`/`.49` rule that was confirmed working on device. That is one edit and it
+should be the first thing tried.
+
+**The cheap check that would settle it before any build:** view-source the live Header HTML
+block and confirm whether a `<script>` is present. If it is absent now and was absent on the
+day `.58` was tested, possibility 2 is the live one.
+
+**Untested on device.**
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -1325,6 +1367,23 @@ been started yet.
   overflowed every time because the logo's size was an *input* to the layout. Give the image
   `flex: 1` + a relative `width` + `resizeMode="contain"` and let its height fall out of the
   space that is actually left. Applies to any full-bleed art in a height-constrained screen.
+- **Confirm a third party's code is LIVE before deleting your own that duplicates it.** `.59`
+  removed every dropdown handler in the app because Board's Header HTML block was believed to
+  carry a working script. Skilljar had stripped the `<script>` tag, so nothing anywhere
+  managed `touch-open` and the control broke in the app and in Chrome. `.60` reverted it
+  wholesale. A `<script>` you wrote and handed over is not a `<script>` that is deployed -
+  view-source the live page, or have someone who can, before removing the fallback.
+- **When a diagnosis depends on an external fact, record the fact AND how it was checked.**
+  The `.59` double-toggle reasoning was sound *given* a live page script. Nobody verified that
+  the script was live, and it was not, so a correct-looking inference produced a wrong build.
+  If a root cause rests on something outside this repo, say in the entry how it was confirmed
+  - and if it was not confirmed, say that instead.
+- **SUPERSEDED BY `.60` - the app manages the Get Started dropdown again.** The note below was
+  written for `.59`, when the page script was believed live. It is kept because it states the
+  real hazard correctly: if that script is ever deployed for real, the app's handler and the
+  page's will bind `touchend` together and toggle `touch-open` twice per tap - net zero,
+  dropdown permanently dead. Before removing the app's handlers a second time, confirm the
+  page script is actually serving.
 - **The app must NOT manage the Get Started dropdown any more - the page does.** As of `.59`
   the only dropdown code left in `LMSWebView.tsx` is the hover neutraliser CSS and
   `fixHeaderOverlap`'s `.dd-menu` guard. Board's Header HTML block owns `touch-open`
