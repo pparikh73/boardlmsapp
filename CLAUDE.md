@@ -52,7 +52,7 @@ Android-specific commits are ever added independently.
 
 ## Versioning
 
-`app.json`'s `version` field (currently `2.116621.60`) is used as both iOS's
+`app.json`'s `version` field (currently `2.116621.61`) is used as both iOS's
 `CFBundleShortVersionString` and Android's `versionName`. **Apple rejects any new binary
 upload whose version is not strictly higher than the last *approved* App Store version**
 — bump this before every new production build, even TestFlight-only ones. Android's
@@ -1230,6 +1230,48 @@ day `.58` was tested, possibility 2 is the live one.
 
 **Untested on device.**
 
+Version `2.116621.61` **removes the `.58` hover/focus neutraliser.** Six CSS lines deleted from
+`ddStyle`; no JS touched. The injected dropdown CSS is now **byte-identical to `2.116621.41`,
+`.49` and `.57`** - verified by extracting the emitted string from each commit and comparing -
+which is the state confirmed working on device.
+
+**Why.** `.58` added a closed-state rule to beat Android's sticky `:hover`. The dropdown then
+would not open at all in the app, while Chrome on the same device was fine - and Chrome does
+not run this script. The neutraliser removed the **only reveal path known to work on device**,
+the site's own `:hover`/`:focus-within` rule, leaving the menu dependent on `touch-open`, which
+is not reliably set. **That makes `.58` the fifth closed-state rule in a row to kill this
+control** (`.43`, `.46`, `.47`, `.48`, `.58`), and the `.58` entry already named it as the
+first thing to revert if the dead button returned. It did; this is that revert.
+
+What remains is one rule, `.has-dd.touch-open .dd-menu` with the four visible values. It is
+**additive - it can only ever reveal, never hide** - so it cannot be what stops the menu
+opening. The site's own CSS does all the hiding, exactly as in `.41`.
+
+**The accepted cost is back, and it is the right trade.** A second tap may not close the menu,
+because Android holds `:hover` on the last-tapped element and the site's own rule keeps
+matching. That is `.41` behaviour, documented since then as deliberate. An unusable control is
+far worse than one that needs a tap elsewhere to dismiss.
+
+**What this does NOT fix, stated plainly:** the Search-overlay persistence. If the menu is held
+open by the site's hover rule rather than by `touch-open`, then clearing the class cannot close
+it - which is what `.54`-`.57` kept discovering. That behaviour returns with this revert. It is
+the smaller problem and it has no safe CSS fix from the app side; the durable answer is the
+page-level script, with `bc-` prefixed class names (see the `is-touch` note below).
+
+**One deviation from a strict six-line deletion, flagged because the brief said touch nothing
+else:** the 24-line comment that explained the neutraliser was replaced with a 12-line one
+describing its removal. Leaving it would have left a comment reading "Order in this stylesheet
+is therefore: neutralise, THEN touch-open" above a stylesheet with no neutraliser - the exact
+failure this file's own rule about deleting comments with the code warns against. Code-only
+diff is still exactly the six Rule-1 lines and nothing more.
+
+Note the surviving `.49` comment block above the rule still states the inheritance mechanism as
+fact. `.55` refuted that - `.dd-menu` is a sibling of the trigger, not a wrapper - and the
+correction is recorded in the `.49` entry above. Left in place here to keep this change to the
+CSS alone.
+
+**Untested on device.**
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -1367,6 +1409,16 @@ been started yet.
   overflowed every time because the logo's size was an *input* to the layout. Give the image
   `flex: 1` + a relative `width` + `resizeMode="contain"` and let its height fall out of the
   space that is actually left. Applies to any full-bleed art in a height-constrained screen.
+- **`is-touch` was never in this app, and it is the class that broke the homepage.** A
+  page-level script added to Skilljar's Global snippet put a large black block on the Academy
+  homepage. `is-touch` goes on `<html>` **at page load** and is therefore an ancestor of
+  everything, so a theme rule like `html.is-touch .panel { position: fixed; height: 100vh;
+  background: #000 }` fires immediately and site-wide. `touch-open` goes on `.has-dd` only on a
+  tap, and its only descendants are `.sb-link` and the `<ul>` - it cannot reach a nav overlay.
+  The app has set `touch-open` on every Get Started tap since `.40`, across ~20 builds and many
+  device tests, with no black block ever reported. **Any future page-level script must use
+  `bc-` prefixed class names** (`bc-is-touch`, `bc-touch-open`); verify against the live
+  stylesheets in DevTools rather than inferring from the symptom.
 - **Confirm a third party's code is LIVE before deleting your own that duplicates it.** `.59`
   removed every dropdown handler in the app because Board's Header HTML block was believed to
   carry a working script. Skilljar had stripped the `<script>` tag, so nothing anywhere

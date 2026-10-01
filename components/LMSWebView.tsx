@@ -234,36 +234,20 @@ const ACADEMY_INJECT_MAIN = `
                 // the same way.
                 var ddStyle = document.createElement('style');
                 ddStyle.textContent =
-                  // 2.116621.58 - neutralise Skilljar's OWN hover/focus reveal.
+                  // 2.116621.61 - the .58 hover/focus neutraliser is REMOVED, and this
+                  // is once again the only rule we inject: one selector, open state only.
                   //
-                  // Every clear from .54 to .57 removed touch-open, and the menu stayed
-                  // visible anyway, because the site's own rule keeps matching:
+                  // .58 added a closed-state rule on .dd-menu to beat Android's sticky
+                  // :hover. The dropdown then would not open at all in the app, while
+                  // Chrome on the same device was fine - and Chrome does not run this
+                  // script. The neutraliser removed the ONLY reveal path that is known to
+                  // work on device (the site's own :hover/:focus-within rule), leaving
+                  // the menu dependent on touch-open, which is not reliably set. That
+                  // makes it the fifth closed-state rule in a row to kill this control.
                   //
-                  //   .has-dd:hover .dd-menu, .has-dd:focus-within .dd-menu { opacity: 1 }
-                  //
-                  // On Android :hover sticks to the last-tapped element, and .sb-link is
-                  // an anchor so it also holds focus - so both halves of that rule stay
-                  // matched after the tap and the class was never what held the menu open.
-                  //
-                  // NO html PREFIX ON THESE SELECTORS. That is load-bearing, not style.
-                  // html .has-dd:hover .dd-menu is (0,3,1); the touch-open rule below is
-                  // (0,3,0). Equal class counts, so the element count decides and the
-                  // neutraliser would outrank touch-open no matter what order they are in
-                  // or that both carry !important - importance is compared first, then
-                  // specificity, and only then source order. Verified in Blink: with the
-                  // html prefix and focus on the trigger, the menu computes
-                  // visibility:hidden WITH touch-open set - a dead button, exactly the
-                  // .46-.48 symptom. Without the prefix both are (0,3,0), source order
-                  // decides, and touch-open wins.
-                  //
-                  // Order in this stylesheet is therefore: neutralise, THEN touch-open.
-                  // Do not reorder, and do not add a prefix to either selector.
-                  '.has-dd:hover .dd-menu,' +
-                  '.has-dd:focus-within .dd-menu {' +
-                  '  opacity: 0 !important;' +
-                  '  visibility: hidden !important;' +
-                  '  pointer-events: none !important;' +
-                  '}' +
+                  // The rule below is additive: it can only ever reveal. It never hides,
+                  // so it cannot be what stops the menu opening. See the note above for
+                  // why a closed-state rule must not come back.
                   '.has-dd.touch-open .dd-menu {' +
                   '  opacity: 1 !important;' +
                   '  visibility: visible !important;' +
