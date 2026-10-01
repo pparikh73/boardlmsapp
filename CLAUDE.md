@@ -1338,6 +1338,69 @@ errors; both scripts pass `node --check`.
 
 **Untested on device.**
 
+Version `2.116621.63` is a **diagnostic build and nothing else — `ACADEMY_DIAGNOSTICS` is
+`true`, so DO NOT ship it publicly.** No fix, no CSS, no change to any dropdown handler. One
+line in `constants/skilljar.ts` compiles the probe out again.
+
+**What it measures and why it needed a build.** Every hover-gated CSS rule proposed for the Get
+Started dropdown — `.43`'s and `.45`'s `@media (hover: none), (pointer: coarse)` neutraliser,
+and the page-side neutraliser Skilljar were about to be sent — turns on what this WebView
+answers for the hover/pointer media features. **That has never been measured.** This file has
+twice recorded the suspicion that a WebView may report `hover: hover` and make such a block
+inert, and twice acted on it without evidence. Headless Chromium reports `hover: none` with
+`pointer: coarse` **false** and `pointer: fine` false as well — no pointer at all — which is a
+lab artefact and says nothing about an Android device.
+
+The probe posts one message per document load carrying six booleans: the four asked for
+(`(hover: none)`, `(hover: hover)`, `(pointer: coarse)`, `(pointer: fine)`) plus
+`(any-hover: none)` and `(any-pointer: coarse)`. **The two `any-*` queries are a deliberate
+addition beyond the brief**, and they are the difference between one build and two: if the
+device reports `hover: hover`, `any-pointer: coarse` is what separates a genuinely paired fine
+pointer from a WebView that simply misreports. They cost 2 of the payload's 138 bytes.
+
+**How it is wired, and why that shape:**
+
+- `ACADEMY_MQ_PROBE` is **its own module-level template literal**, interpolated as
+  `${ACADEMY_DIAGNOSTICS ? ACADEMY_MQ_PROBE : ''}` — the same shape `community.tsx` uses. It is
+  deliberately **not** written as a nested template literal inside `ACADEMY_INJECT_MAIN`: that
+  would put a backtick inside that literal, which per `.45`/`.47` silently truncates the script
+  with no build error. The probe contains no backtick and no interpolation of its own.
+- `onMessage` is passed as `ACADEMY_DIAGNOSTICS ? handleMessage : undefined`, not
+  unconditionally. With the flag false the WebView gets no `onMessage` prop at all, so its
+  configuration is exactly what `.62` shipped — the prop was removed entirely in `.46` and this
+  keeps that true for release builds.
+- The probe sits at the very end of `ACADEMY_INJECT_MAIN`, inside its own `try/catch`, and
+  `matchMedia` is itself wrapped so an unsupported query yields `'ERR'` rather than throwing.
+
+**Verified before commit, with the probe extracted from the file rather than retyped:**
+
+- Run in real Blink against a stubbed `window.ReactNativeWebView`: **exactly one** message
+  posted, valid JSON, `tag: "BC MQ"`, all six values booleans, and the handler's log line
+  renders with no `undefined`. Payload 138 bytes.
+- `node --check` passes on `ACADEMY_INJECT_BEFORE`, the probe, and `ACADEMY_INJECT_MAIN` in
+  **both** flag states.
+- `ACADEMY_INJECT_BEFORE` is **byte-identical** to `.62` (8,640 chars). With the flag false,
+  `ACADEMY_INJECT_MAIN` is `.62` plus **exactly one newline** and nothing else — proven by
+  character-level comparison against `HEAD`, not by length. (A raw length comparison looked 18
+  chars short at first; that was an artefact of the extraction harness substituting
+  interpolations differently, not a deletion.)
+- `ddStyle`, `bcHandleDdTouch`, `bcHandleDdClick`, `bcDdCloseAll` and every `touch-open` site
+  appear **nowhere in the diff**. rAF loops stay at three, `MutationObserver`s at three.
+  `fixHeaderOverlap`'s `.dd-menu` guard is intact. Typecheck unchanged at 7 errors.
+- `COMMUNITY_DIAGNOSTICS` stays `false`, so the Community overlay is still compiled out.
+
+**The reading to take, and what each outcome means for the CSS.** `hover: none` true →
+hover-gated CSS is usable in the WebView and the `.43`/`.45` neutraliser failures had some
+other cause. `hover: hover` true → every `@media (hover: none)` block ever tried in this app was
+**inert**, which retroactively explains `.43` and `.45`, and no hover-gated rule can be part of
+any future fix on either side. Either way the answer is a fact rather than an inference, which
+is what this file's own rule asks for when a diagnosis rests on something outside the repo.
+
+**The stale-comment fix.** `constants/skilljar.ts` said the flag "reads nothing, so flipping it
+true does nothing on its own" — written in `.46` and true until this build. It now has a
+consumer, so that note was corrected in the same commit rather than left to mislead the next
+reader.
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -1555,6 +1618,28 @@ been started yet.
   This also catches headless-Chrome artefacts, which is how two false readings were caught
   earlier in this sequence (transitions not advancing under `--virtual-time-budget`, and
   headless reporting `hover: none`).
+- **A build whose only job is to take a reading is cheaper than another build built on a
+  guess.** `.43`, `.45` and the page-side proposal reviewed before `.63` all hinged on whether
+  this WebView reports `hover: none`, and nobody had ever read it. Two of those builds shipped a
+  neutraliser that is inert if the answer is `hover: hover`. When a fix's correctness depends on
+  a runtime fact about the WebView, probe for the fact first — `matchMedia`, a computed style, a
+  class's presence — and keep the probe gated behind `ACADEMY_DIAGNOSTICS` so one line removes
+  it. Do not read a media feature off headless Chromium and treat it as the device: headless
+  reports `hover: none` with BOTH `pointer: coarse` and `pointer: fine` false, which no real
+  device does.
+- **Gate a diagnostic's NATIVE prop as well as its injected code.** `.63` passes
+  `onMessage={ACADEMY_DIAGNOSTICS ? handleMessage : undefined}` rather than always passing it,
+  so with the flag false the WebView's prop set is byte-for-byte what the release build had.
+  Switching off only the injected half would leave a bridge consumer wired up in production and
+  make "identical to the last release" untrue in a way no script extraction would catch.
+- **An interpolated diagnostic belongs in its OWN module-level literal, never nested in the
+  script's.** Writing it as `${FLAG ? \`…\` : ''}` inline puts a backtick inside the injected
+  template literal, which truncates the script silently with no build error (`.45`, `.47`). Give
+  it a const of its own and interpolate the name — the shape `community.tsx` already uses.
+- **Compare scripts character by character, not by length.** A length check on `.63`'s main
+  script read 18 chars short of `.62` and looked like an accidental deletion; it was the
+  extraction harness substituting `${…}` differently between the two runs. Diff the actual
+  strings against `git show HEAD:<file>` before believing either a match or a mismatch.
 - **Specificity is compared BEFORE source order, even between two `!important` rules.** A
   neutraliser written as `html .has-dd:hover .dd-menu` is (0,3,1) and beats
   `.has-dd.touch-open .dd-menu` at (0,3,0) whatever the order - equal class counts mean the

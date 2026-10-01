@@ -21,12 +21,16 @@ export const COMMUNITY_DIAGNOSTICS = false;
 // Every consumer has been removed as well, not just switched off: the [BC LAYOUT]
 // onLayout logging in app/(tabs)/index.tsx, the [BC DD] bcLog/bcDesc calls and the
 // [BC NAV] log in components/LMSWebView.tsx, and the onMessage bridge that carried
-// them. Nothing reads this flag any more, so it is retained only as the documented
-// switch to re-instrument from — flipping it true does nothing on its own.
-// Academy diagnostics, false for release. The .48 dropdown probe was removed in
-// .49 — the git history answered what it was for — so nothing reads this flag;
-// re-instrumenting means re-adding call sites.
-export const ACADEMY_DIAGNOSTICS = false;
+// them.
+//
+// 2.116621.63 — this flag HAS a consumer again, so the note above about it reading
+// nothing no longer applies. It gates ACADEMY_MQ_PROBE in components/LMSWebView.tsx
+// (interpolated into the main injected script) and the onMessage prop that receives
+// it. TRUE in .63 because that build exists only to take the hover/pointer
+// matchMedia reading off a real device. Set it back to FALSE before any public
+// build: that one line removes the probe from the script and the onMessage prop
+// from the WebView, leaving the configuration exactly as .62 shipped it.
+export const ACADEMY_DIAGNOSTICS = true;
 // Community uses Azure AD B2C — separate from Academy's Skilljar SSO
 export const COMMUNITY_AUTH_URL = 'https://community.board.com/entry/signin?target=https%3A%2F%2Fcommunity.board.com%2F';
 // Community employee login uses Azure AD SAML (Boardway/corporate SSO)

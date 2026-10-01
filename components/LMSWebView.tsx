@@ -1,8 +1,8 @@
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Platform } from 'react-native';
-import { WebView, WebViewNavigation, WebViewRequest } from 'react-native-webview';
+import { WebView, WebViewNavigation, WebViewRequest, WebViewMessageEvent } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
-import { BRAND, WEBVIEW_USER_AGENT, isAllowedWebViewUrl } from '../constants/skilljar';
+import { BRAND, WEBVIEW_USER_AGENT, isAllowedWebViewUrl, ACADEMY_DIAGNOSTICS } from '../constants/skilljar';
 
 interface LMSWebViewProps {
   url: string;
@@ -177,6 +177,44 @@ const ACADEMY_INJECT_BEFORE = `
             })();
             true;
           `;
+
+// 2.116621.63 - DIAGNOSTIC ONLY. Interpolated into ACADEMY_INJECT_MAIN below and
+// gated on ACADEMY_DIAGNOSTICS, exactly as community.tsx gates its own overlay: with
+// the flag false the interpolation yields an empty string and the onMessage prop is
+// not passed at all, so the release build carries neither this code nor a bridge.
+//
+// It answers one question that no amount of reasoning can settle, because it is a
+// property of this WebView build on this device: what does it report for the
+// hover/pointer media features? Every hover-gated CSS rule considered for the Get
+// Started dropdown depends on it, and it has never been measured on device. Headless
+// Chromium reports hover:none with pointer:coarse FALSE, which is a lab artefact.
+//
+// any-hover / any-pointer are included beyond the four asked for because they cost
+// nothing and they separate the two readings that would otherwise need a second
+// build: a device that genuinely has a fine pointer paired, versus a WebView that
+// simply misreports hover.
+//
+// Kept in its OWN const so this literal contains no interpolation and no backtick.
+const ACADEMY_MQ_PROBE = `
+              try {
+                var bcMq = function (q) {
+                  try { return window.matchMedia(q).matches; }
+                  catch (e) { return 'ERR'; }
+                };
+                var bcMqPayload = {
+                  tag: 'BC MQ',
+                  hoverNone: bcMq('(hover: none)'),
+                  hoverHover: bcMq('(hover: hover)'),
+                  pointerCoarse: bcMq('(pointer: coarse)'),
+                  pointerFine: bcMq('(pointer: fine)'),
+                  anyHoverNone: bcMq('(any-hover: none)'),
+                  anyPointerCoarse: bcMq('(any-pointer: coarse)')
+                };
+                if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+                  window.ReactNativeWebView.postMessage(JSON.stringify(bcMqPayload));
+                }
+              } catch (e) {}
+`;
 
 const ACADEMY_INJECT_MAIN = `
             (function() {
@@ -1081,6 +1119,7 @@ const ACADEMY_INJECT_MAIN = `
                 }, true);
               } catch (e) {}
 
+${ACADEMY_DIAGNOSTICS ? ACADEMY_MQ_PROBE : ''}
             })();
             true;
           `;
@@ -1235,6 +1274,25 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
       return false;
     }
 
+    // 2.116621.63 - DIAGNOSTIC ONLY. Receives ACADEMY_MQ_PROBE's one message per
+    // document load and prints it. Wired through the ternary on the prop below rather
+    // than passed unconditionally, so with ACADEMY_DIAGNOSTICS false the WebView is
+    // configured exactly as it was in .62 - no onMessage, no bridge consumer.
+    const handleMessage = (event: WebViewMessageEvent) => {
+      try {
+        const data = JSON.parse(event.nativeEvent.data);
+        if (!data || data.tag !== 'BC MQ') return;
+        console.log(
+          '[BC MQ] hover:none=' + data.hoverNone +
+          '  hover:hover=' + data.hoverHover +
+          '  pointer:coarse=' + data.pointerCoarse +
+          '  pointer:fine=' + data.pointerFine +
+          '  any-hover:none=' + data.anyHoverNone +
+          '  any-pointer:coarse=' + data.anyPointerCoarse
+        );
+      } catch (e) {}
+    };
+
     return (
       <View style={styles.container}>
         {showNavBar && (
@@ -1273,6 +1331,7 @@ const LMSWebView = forwardRef<LMSWebViewHandle, LMSWebViewProps>(
           }}
           onNavigationStateChange={handleNavigationChange}
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
+          onMessage={ACADEMY_DIAGNOSTICS ? handleMessage : undefined}
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
           overScrollMode="never"
