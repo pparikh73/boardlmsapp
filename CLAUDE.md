@@ -1272,6 +1272,72 @@ CSS alone.
 
 **Untested on device.**
 
+Version `2.116621.62` makes the dropdown close by itself after a menu link is tapped, by
+dropping focus so the site's own `:focus-within` rule stops matching. **One bubble-phase click
+listener in `ACADEMY_INJECT_MAIN`; 33 lines, no CSS, no class touched.**
+
+**This is the first dropdown fix in the sequence that targets neither `touch-open` nor a
+closed-state rule**, and that is deliberate: `.54`-`.57` added four ways to clear the class and
+`.58` added a closed-state rule, and the menu stayed visible through all five, because
+`.has-dd:focus-within .dd-menu` kept matching independently. `.61` re-established that the
+site's hover/focus rule is the only reveal path confirmed working on device, so the fix has to
+remove the *condition* that rule tests, not fight the rule.
+
+**The device fact it acts on**: in mobile Chrome, tapping a `.dd-menu` link navigates and the
+menu closes by itself; in the Android WebView `:focus-within` stays active and the menu persists
+on the next page. Chrome drops focus on navigation for us; the WebView does not. This does by
+hand what Chrome does natively.
+
+**The specified fix was a complete no-op, and was corrected before it shipped.** The brief
+said to call `blur()` on `.sb-link`. Measured in Blink against Board's real markup, with all
+three variants run from the same harness:
+
+| step | no listener | **spec as written** | **as implemented** |
+|---|---|---|---|
+| menu link tapped | `focus-within=true` | `focus-within=true` | **`false`** |
+| state the next page inherits | **visible** - the bug | **visible** - bug survives | **hidden** |
+| tap the SECOND dropdown's link | dd1 untouched | **dd1 wrongly blurred** | dd1 untouched |
+| `defaultPrevented` on the link | false | false | **false** - still navigates |
+| tap outside any `.dd-menu` | baseline | baseline | **identical to baseline** |
+
+Two separate defects in the brief, both visible above:
+
+1. **`blur()` on the trigger cannot clear `:focus-within`.** Tapping a `.dd-menu` anchor moves
+   `document.activeElement` onto **that anchor**, so the pseudo-class is satisfied by the menu
+   link, not by `.sb-link`. Blurring the trigger leaves it matched. **The tapped link is what
+   must be blurred**; `.sb-link` is blurred as well, for the case where focus never left it.
+2. **`document.querySelector('.sb-link')` returns the FIRST trigger in the document**, not the
+   tapped one, so tapping the second dropdown's link blurred the first dropdown's trigger. Both
+   blurs are now scoped through `link.closest('.has-dd')`.
+
+**Why it cannot regress the control** - by reachability, not by testing:
+
+- It only ever calls `blur()`. It sets no class, injects no CSS and reads no class, so it cannot
+  be the dead-button pattern (`.46`-`.48`, `.58`) and cannot double-toggle `touch-open` (`.59`).
+- It returns immediately unless `t.closest('.dd-menu a')` matches, so a tap on the trigger
+  (`.has-dd > .sb-link`) and a tap outside never reach the body. Row 6 above is byte-identical
+  to the no-listener control.
+- It touches no event - no `preventDefault`, no `stopPropagation` - and `blur()` does not cancel
+  a click's default action, so the link still navigates. Confirmed `defaultPrevented=false`.
+- **Bubble phase, deliberately.** `bcHandleDdClick` is registered at `document` **capture** and
+  runs first; it takes its `.54` `.dd-menu` branch, removes `touch-open` and returns without
+  touching the event. This listener then runs on the way back up, after the target is resolved,
+  so it cannot retarget the tapped link - the `.54` hit-test rule is respected rather than
+  bypassed.
+
+**One caveat on the measurement, stated so it is not over-trusted**: the harness reproduces a
+tap as `focus()` + `click()`, because a synthetic `click()` alone does not move focus in Blink.
+That focus move is not an assumption - the device report is what established focus lands on the
+tapped anchor - but it is simulated here rather than produced by a real touch.
+
+`bcHandleDdTouch`, `bcHandleDdClick`, `bcDdCloseAll`, `bcSchedule`, `bcScheduleVideoFix`,
+`bcScheduleMarkInline`, the `.56` observer branch, both `.55` listeners and the `ddStyle` rule
+are all **byte-identical** to `.61`, and `ACADEMY_INJECT_BEFORE` is byte-identical at 8,640
+chars. rAF loops stay at three and `MutationObserver`s at three. Typecheck unchanged at 7
+errors; both scripts pass `node --check`.
+
+**Untested on device.**
+
 **Android**: Not yet public. App created in Play Console (org: "Equinox Agents", to be
 transferred to Board later, same as the Apple Developer account). Internal testing track
 is set up with build carrying `versionCode 3` / version `2.116621.23`. Store listing,
@@ -1467,6 +1533,28 @@ been started yet.
   `:hover` on the last-tapped element and an anchor trigger also holds focus. Before adding
   another clear, ask what else can make the thing visible - and prove it by reading
   `getComputedStyle` after the clear, not by inferring from the symptom.
+- **To close a menu the site reveals on `:focus-within`, remove the FOCUS, not a class — and
+  blur the TAPPED element, not the trigger.** `:focus-within` matches an ancestor of whatever
+  holds focus, and tapping a `.dd-menu` link puts `document.activeElement` on **that link**. So
+  `document.querySelector('.sb-link').blur()` — the obvious fix, and the one `.62` was specified
+  as — leaves the pseudo-class matched and does nothing at all; measured in Blink, it is
+  indistinguishable from no listener. Blur the element the tap actually focused. The app only
+  has to do this because mobile Chrome drops focus on navigation and the Android WebView does
+  not; the symptom is a menu that persists onto the next page in the app and nowhere else.
+- **A delegated handler must scope its lookups through `closest()`, never a document-wide
+  `querySelector`.** `document.querySelector('.sb-link')` returns the FIRST match in the
+  document, so with two `.has-dd` tiles on the page a tap on the second one's menu mutated the
+  first one's trigger — caught in the `.62` A/B run, not reasoned about. Walk up from the event
+  target (`link.closest('.has-dd')`) and query inside that, so the handler can only ever touch
+  the instance that was tapped.
+- **Run the control variant, not just the fix.** The `.62` harness ran three builds of the same
+  page — no listener, the specified listener, the implemented one — and the no-listener column
+  is what proved the specified version was inert rather than merely weak, and what proved the
+  implemented one leaves an outside tap byte-identical to baseline. A single-variant test shows
+  that a fix did something; only the control shows *which* of the things you changed did it.
+  This also catches headless-Chrome artefacts, which is how two false readings were caught
+  earlier in this sequence (transitions not advancing under `--virtual-time-budget`, and
+  headless reporting `hover: none`).
 - **Specificity is compared BEFORE source order, even between two `!important` rules.** A
   neutraliser written as `html .has-dd:hover .dd-menu` is (0,3,1) and beats
   `.has-dd.touch-open .dd-menu` at (0,3,0) whatever the order - equal class counts mean the

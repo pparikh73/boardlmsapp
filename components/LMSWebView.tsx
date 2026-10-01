@@ -406,6 +406,39 @@ const ACADEMY_INJECT_MAIN = `
                 document.addEventListener('touchend', bcHandleDdTouch, true);
                 document.addEventListener('click', bcHandleDdClick, true);
 
+                // 2.116621.62 - drop focus when a menu link is tapped, so the site's own
+                // .has-dd:focus-within rule stops matching once the new page loads.
+                //
+                // Device-confirmed: in mobile Chrome tapping a .dd-menu link navigates and
+                // the menu closes by itself; in the Android WebView :focus-within stays
+                // active and the menu persists on the next page. Chrome drops focus for us;
+                // the WebView does not. This does by hand what Chrome does natively.
+                //
+                // IT MUST BLUR THE TAPPED LINK, NOT THE TRIGGER. Verified in Blink:
+                // tapping a .dd-menu anchor moves document.activeElement onto THAT anchor,
+                // so :focus-within on .has-dd is satisfied by the menu link and
+                // blurring .sb-link alone leaves it matched - a complete no-op. Blurring
+                // the tapped link clears it. .sb-link is blurred as well, for the case
+                // where focus never moved off the trigger; both are scoped to the tapped
+                // link's OWN .has-dd rather than a document-wide querySelector, so a
+                // second dropdown on the page could never be the one that gets blurred.
+                //
+                // Touches no class and no CSS, so it cannot collide with anything and
+                // cannot be the dead-button pattern. blur() does not cancel a click's
+                // default action, so the link still navigates.
+                document.addEventListener('click', function (e) {
+                  try {
+                    var t = e.target;
+                    if (!t || typeof t.closest !== 'function') return;
+                    var link = t.closest('.dd-menu a');
+                    if (!link) return;
+                    if (typeof link.blur === 'function') link.blur();
+                    var host = link.closest('.has-dd');
+                    var trigger = host && host.querySelector('.sb-link');
+                    if (trigger && typeof trigger.blur === 'function') trigger.blur();
+                  } catch (err) {}
+                }, false);
+
                 // 2.116621.55 - clear an open dropdown when a text field takes focus.
                 //
                 // Skilljar's Search opens an IN-PAGE overlay, so none of the
